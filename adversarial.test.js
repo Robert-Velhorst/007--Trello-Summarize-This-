@@ -191,11 +191,12 @@ const reqOpts = (method, p, token) => ({
 });
 
 async function runIsolationTests() {
-  const storagePath = path.join(os.tmpdir(), `summarize-this-adversarial-${Date.now()}.json`);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "summarize-this-adversarial-"));
+  const storagePath = path.join(tempDir, "backend-store.json");
   const { server } = await startBackendServer({
     port: TEST_PORT,
     allowMissingEnv: true,
-    storagePath
+    filePath: storagePath
   });
 
   try {
@@ -266,8 +267,8 @@ async function runIsolationTests() {
     assert.ok(typeof creditsB.body.credits === "number", "User B credits is a number");
 
   } finally {
-    fs.rmSync(storagePath, { force: true });
     await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -337,6 +338,8 @@ assert.ok(!Object.prototype.hasOwnProperty.call(normalized, "UNKNOWN_FLAG"), "Un
 // ─── Run async isolation tests then report ────────────────────────────────────
 
 runIsolationTests().then(() => {
+  return runIsolationTests();
+}).then(() => {
   console.log("Adversarial tests passed.");
 }).catch((err) => {
   console.error("Adversarial test FAILED:", err.message);

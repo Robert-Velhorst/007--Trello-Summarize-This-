@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const config = require("./backend-config");
-const { createBackendStore, createId } = require("./backend-storage");
+const { createBackendStore, createId, normalizeBackendStoreOptions } = require("./backend-storage");
 
 const BODY_LIMIT = 1024 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
@@ -1197,10 +1197,11 @@ async function route(req, res, store) {
 }
 
 async function createBackendApp(options = {}) {
+  const normalizedOptions = normalizeBackendStoreOptions(options);
   const seedPasswordRecord = scryptRecord("correct-password", "seed-password-salt");
-  const store = options.store || await createBackendStore({
-    storeType: options.storeType,
-    filePath: options.filePath,
+  const store = normalizedOptions.store || await createBackendStore({
+    storeType: normalizedOptions.storeType,
+    filePath: normalizedOptions.filePath,
     seedPasswordRecord
   });
 

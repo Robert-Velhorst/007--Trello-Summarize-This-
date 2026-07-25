@@ -3,6 +3,8 @@ const fs = require("node:fs");
 const fsp = fs.promises;
 const path = require("node:path");
 
+const DEFAULT_RUNTIME_STORE_PATH = path.join(__dirname, "database", "runtime", "local-backend-store.json");
+
 function createId(prefix) {
   const id = typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -20,6 +22,18 @@ function clone(value) {
 
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function resolveBackendFilePath(options = {}) {
+  if (options.filePath) return String(options.filePath);
+  if (options.storagePath) return String(options.storagePath);
+  return DEFAULT_RUNTIME_STORE_PATH;
+}
+
+function normalizeBackendStoreOptions(options = {}) {
+  return Object.assign({}, options, {
+    filePath: resolveBackendFilePath(options)
+  });
 }
 
 function defaultState() {
@@ -68,7 +82,7 @@ function defaultState() {
 
 class LocalBackendStore {
   constructor(options = {}) {
-    this.filePath = options.filePath || path.join(__dirname, "database", "local-backend-store.json");
+    this.filePath = resolveBackendFilePath(options);
     this.state = null;
   }
 
@@ -272,19 +286,20 @@ class PostgresBackendStore extends LocalBackendStore {
 }
 
 async function createBackendStore(options = {}) {
-  const storeType = options.storeType || process.env.BACKEND_STORE || (process.env.DATABASE_URL ? "postgres" : "local");
-  const seedPasswordRecord = options.seedPasswordRecord || null;
+  const normalizedOptions = normalizeBackendStoreOptions(options);
+  const storeType = normalizedOptions.storeType || process.env.BACKEND_STORE || (process.env.DATABASE_URL ? "postgres" : "local");
+  const seedPasswordRecord = normalizedOptions.seedPasswordRecord || null;
   if (storeType === "postgres") {
-    const connection = options.connection || require("./database/connection");
+    const connection = normalizedOptions.connection || require("./database/connection");
     const store = new PostgresBackendStore({
-      filePath: options.filePath,
+      filePath: normalizedOptions.filePath,
       connection
     });
     return store.initialize(seedPasswordRecord);
   }
 
   const store = new LocalBackendStore({
-    filePath: options.filePath
+    filePath: normalizedOptions.filePath
   });
   return store.initialize(seedPasswordRecord);
 }
@@ -292,6 +307,9 @@ async function createBackendStore(options = {}) {
 module.exports = {
   createBackendStore,
   createId,
+  DEFAULT_RUNTIME_STORE_PATH,
   LocalBackendStore,
-  PostgresBackendStore
+  PostgresBackendStore,
+  normalizeBackendStoreOptions,
+  resolveBackendFilePath
 };
