@@ -12,6 +12,7 @@ The shipped product consists of:
 - `backend-cli.js` for lock-safe migration, backup, restore, reconciliation, support, and worker operations.
 - `Dockerfile` and `docker-compose.yml` for non-root container deployment.
 - `installer/windows` for a standalone Windows 11 install, upgrade, local launch, ngrok sharing, and uninstall path.
+- `local-dev-server.js` and `index.js` provide the local development server and its `node .` compatibility entry point.
 
 ## Verification Results
 
