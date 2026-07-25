@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
@@ -12,6 +13,7 @@ process.env.GOOGLE_API_KEY = "";
 process.env.PROXY_ENDPOINT = "";
 
 const { startBackendServer } = require("./backend-server");
+const { DEFAULT_RUNTIME_STORE_PATH } = require("./backend-storage");
 
 async function requestJson(baseUrl, method, path, body, headers = {}) {
   const target = new URL(`${baseUrl}${path}`);
@@ -53,14 +55,25 @@ async function requestJson(baseUrl, method, path, body, headers = {}) {
 
 async function main() {
   const filePath = path.join(os.tmpdir(), `summarize-this-backend-test-${Date.now()}.json`);
+  const storagePathAlias = path.join(os.tmpdir(), `summarize-this-backend-alias-${Date.now()}.json`);
+  const precedencePath = path.join(os.tmpdir(), `summarize-this-backend-precedence-${Date.now()}.json`);
   const { server } = await startBackendServer({ host: "127.0.0.1", port: 0, allowMissingEnv: false, filePath });
   const address = server.address();
   const baseUrl = `http://${address.address}:${address.port}`;
+  const customUserEmail = "custom-file-path@test.example";
 
   try {
     const health = await requestJson(baseUrl, "GET", "/api/health");
     assert.equal(health.status, 200);
     assert.equal(health.data.status, "ok");
+
+    const customRegister = await requestJson(baseUrl, "POST", "/api/auth/register", {
+      email: customUserEmail,
+      password: "custom-file-pass",
+      name: "Custom File User"
+    });
+    assert.equal(customRegister.status, 201);
+    assert.ok(customRegister.data.token);
 
     const readiness = await requestJson(baseUrl, "GET", "/api/readiness");
     assert.equal(readiness.status, 200);
@@ -482,6 +495,74 @@ async function main() {
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+
+  assert.equal(fs.existsSync(filePath), true);
+  const customStore = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  assert.ok(Array.isArray(customStore.users));
+  assert.ok(customStore.users.some((item) => item.email === customUserEmail));
+
+  if (fs.existsSync(DEFAULT_RUNTIME_STORE_PATH)) {
+    const runtimeStore = JSON.parse(fs.readFileSync(DEFAULT_RUNTIME_STORE_PATH, "utf8"));
+    assert.ok(!runtimeStore.users.some((item) => item.email === customUserEmail));
+  }
+
+  fs.rmSync(filePath, { force: true });
+
+  const { server: aliasServer } = await startBackendServer({
+    host: "127.0.0.1",
+    port: 0,
+    allowMissingEnv: false,
+    storagePath: storagePathAlias
+  });
+  const aliasAddress = aliasServer.address();
+  const aliasBaseUrl = `http://${aliasAddress.address}:${aliasAddress.port}`;
+
+  try {
+    const aliasRegister = await requestJson(aliasBaseUrl, "POST", "/api/auth/register", {
+      email: "storage-alias@test.example",
+      password: "alias-pass",
+      name: "Storage Alias User"
+    });
+    assert.equal(aliasRegister.status, 201);
+  } finally {
+    await new Promise((resolve) => aliasServer.close(resolve));
+  }
+
+  assert.equal(fs.existsSync(storagePathAlias), true);
+  const aliasStore = JSON.parse(fs.readFileSync(storagePathAlias, "utf8"));
+  assert.ok(aliasStore.users.some((item) => item.email === "storage-alias@test.example"));
+  fs.rmSync(storagePathAlias, { force: true });
+
+  const { server: precedenceServer } = await startBackendServer({
+    host: "127.0.0.1",
+    port: 0,
+    allowMissingEnv: false,
+    filePath: precedencePath,
+    storagePath: storagePathAlias
+  });
+  const precedenceAddress = precedenceServer.address();
+  const precedenceBaseUrl = `http://${precedenceAddress.address}:${precedenceAddress.port}`;
+
+  try {
+    const precedenceRegister = await requestJson(precedenceBaseUrl, "POST", "/api/auth/register", {
+      email: "precedence@test.example",
+      password: "precedence-pass",
+      name: "Precedence User"
+    });
+    assert.equal(precedenceRegister.status, 201);
+  } finally {
+    await new Promise((resolve) => precedenceServer.close(resolve));
+  }
+
+  assert.equal(fs.existsSync(precedencePath), true);
+  const precedenceStore = JSON.parse(fs.readFileSync(precedencePath, "utf8"));
+  assert.ok(precedenceStore.users.some((item) => item.email === "precedence@test.example"));
+  if (fs.existsSync(storagePathAlias)) {
+    const aliasAfterPrecedence = JSON.parse(fs.readFileSync(storagePathAlias, "utf8"));
+    assert.ok(!aliasAfterPrecedence.users.some((item) => item.email === "precedence@test.example"));
+  }
+  fs.rmSync(precedencePath, { force: true });
+  fs.rmSync(storagePathAlias, { force: true });
 
   console.log("Backend contract tests passed.");
 }
