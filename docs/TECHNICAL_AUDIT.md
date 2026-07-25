@@ -17,6 +17,7 @@ The current shipped product is the static Trello Power-Up flow built around:
 - `trello-integration.js` — Trello REST API integration layer with error sanitization.
 - `proxy/cloudflare-worker.mjs` — Optional Cloudflare Worker proxy for AI calls.
 - `local-dev-server.js` — Static file server for local development. Hardened with CORS, security headers, and graceful shutdown in Phase 115.
+- `index.js` - Compatibility entry point for `node .`; delegates to the same lightweight local server as `npm start`.
 - `backend-app.js` / `backend-server.js` / `backend-config.js` — Backend API with a local JSON runtime store, user auth, admin panel, credit system, and summarize endpoint. Hardened with security headers and CORS in Phase 115.
 
 This surface supports:

@@ -377,6 +377,14 @@ assert.ok(FeatureFlags.isEnabled("ENABLE_BATCH_ANALYSIS"), "Batch analysis enabl
 assert.ok(!FeatureFlags.isEnabled("ENABLE_BACKEND_ADMIN"), "Backend admin disabled by default");
 assert.ok(!FeatureFlags.isEnabled("NONEXISTENT_FLAG"), "Unknown flag returns false");
 
+const incompleteLocalStorage = global.localStorage;
+global.localStorage = {};
+assert.ok(
+  FeatureFlags.isEnabled("ENABLE_CONSENSUS_MODE"),
+  "Feature flags fall back safely when localStorage is unavailable or incomplete"
+);
+global.localStorage = incompleteLocalStorage;
+
 const allFlags = FeatureFlags.getAllFlags();
 assert.ok(Array.isArray(allFlags), "getAllFlags returns array");
 assert.ok(allFlags.length >= 10, "At least 10 flags defined");
