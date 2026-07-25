@@ -39,20 +39,21 @@ npm run start:backend
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Token signing secret (min 32 chars recommended) |
+| `JWT_SECRET` | Yes | Secret used to key opaque session-token hashes (min 32 chars recommended; retained name for compatibility) |
 | `ADMIN_PASSWORD` | Yes | Admin panel password |
 | `TRELLO_APP_KEY` | Recommended | Trello Power-Up app key for comment/auth routes |
-| `OPENAI_API_KEY` | Optional | Direct OpenAI provider key |
-| `ANTHROPIC_API_KEY` | Optional | Direct Anthropic provider key |
-| `GOOGLE_API_KEY` | Optional | Direct Google AI provider key |
-| `PROXY_ENDPOINT` | Optional | HTTPS proxy endpoint for AI calls |
-| `DATABASE_URL` | Optional | Persistent DB (not active; backend uses in-memory store) |
-| `STRIPE_SECRET_KEY` | Optional | Stripe integration |
-| `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook verification |
+| `OPENAI_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `ANTHROPIC_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `GOOGLE_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `PROXY_ENDPOINT` | Optional | Used by the browser Power-Up proxy flow; the local backend does not proxy requests |
+| `BACKEND_ALLOWED_ORIGINS` | Required for hosted backend use | Comma-separated hosted Power-Up origins allowed to make browser API requests; local defaults are `http://127.0.0.1:17117,http://localhost:17117` |
+| `DATABASE_URL` | Ignored | No PostgreSQL store is implemented; the backend always uses its local JSON runtime store. Do not treat this variable as database enablement. |
+| `STRIPE_SECRET_KEY` | Not active | Reserved for a future verified Stripe integration; purchases remain disabled |
+| `STRIPE_WEBHOOK_SECRET` | Not active | Reserved for a future verified Stripe integration; webhooks remain disabled |
 
 ## How to Run Migrations
 
-No migrations are required for the current in-memory backend. If a persistent database is provisioned in future, database migration tooling must be added at that time.
+No migrations are required for the current local JSON runtime store. If a persistent database is provisioned in future, database migration tooling must be added at that time.
 
 ## How to Run Workers/Schedulers
 
@@ -131,17 +132,17 @@ See `proxy/README.md` for full instructions.
 ## Security Warnings
 
 - Do not commit `.dev.vars`, `JWT_SECRET`, or any provider keys.
-- Backend stores passwords in plaintext in memory — not production-safe. Add password hashing before any external deployment.
+- Backend stores user password hashes with salts in a local JSON runtime store, but admin login still depends on environment credentials and the overall backend remains non-production-safe. Treat it as non-production-safe until a production database, HTTPS, and operational hardening are in place.
 - The `proxy/.dev.vars` file is excluded by `.gitignore`.
 - AI summaries must not be presented as verified facts without human review.
 
 ## Known Limitations
 
-1. Backend uses in-memory store — data is lost on restart.
-2. Passwords are stored in plaintext — not production-safe.
+1. Backend uses a local JSON runtime store by default; it is not a production database or a multi-instance deployment.
+2. User passwords are stored as salted hashes, but admin authentication still relies on environment credentials and the backend remains non-production-safe overall.
 3. No real database integration.
 4. Binary attachment content (PDF, Word, images) is metadata-only.
-5. Batch execution is manual-first — no automated unattended batch.
+5. Batch execution is manual-first — no automated unattended batch; the server deliberately rejects `/run` rather than inventing completed analyses.
 6. Trello description writeback is not implemented.
 7. Measured accuracy proof is not available — confidence is a heuristic signal.
 

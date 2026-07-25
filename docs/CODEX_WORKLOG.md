@@ -37,5 +37,33 @@
   - Created `docs/BLOCKED_PHASES.md` formally registering the 13 strictly blocked phases per prompt rules.
 
 - **Phase Status Ledger Completion:**
-  - `docs/PHASE_STATUS_LEDGER.md` updated: **103 phases Implemented**, **13 phases Blocked** (per prompt rules), **0 Missing**, **0 Partial**.
+  - Historical ledger entry: 103 phase artifacts were classified as Implemented and 13 as externally Blocked. This was not evidence that the product had zero missing or partial capabilities; current truth is controlled by `docs/GOAL_COMPLETION_MATRIX.md` and `docs/FINAL_VERIFICATION_REPORT.md`.
   - All 116 phases accounted for.
+
+## 2026-07-25
+
+- Reworked `backend.test.js` to exercise `createBackendApp()` in-process instead of binding a localhost port.
+- Preserved backend contract coverage while removing the environment-specific `listen EPERM 127.0.0.1:8787` failure mode.
+- Re-ran the shipped automated suite: `node test.js`, `node backend.test.js`, and `npm test` all passed.
+- Reworked `adversarial.test.js` to use the same in-process backend harness so cross-user isolation checks no longer require binding `127.0.0.1:18080`.
+- Verified the expanded safety suite with `node adversarial.test.js` and `npm run test:all`.
+- Added historical-scope notices to top-level milestone and deployment docs that still implied current production readiness (`FINAL_DEPLOYMENT_GUIDE.md`, `DEPLOYMENT_GUIDE.md`, `todo-updated.md`).
+- Refreshed `docs/FINAL_NO_EXCUSES_SEARCH.md` for the 2026-07-25 state and recorded the relabeling of historical docs.
+- Removed remaining false-success backend paths: payment purchase, Stripe webhooks, transaction refunds, unattended batch execution, and backup create/restore now return explicit unavailable responses until their provider/snapshot implementations are real and verified.
+- Updated contract coverage and the API, storage, data-model, runbook, completion-matrix, and final-verification documentation to match the local JSON runtime-store and disabled external operations.
+- Corrected the active popup batch completion model: partial/blocked runs now state the exact analyzed and blocked counts, while fully processed runs remain `review-required`; neither outcome implies a Trello write.
+- Added an AI-claim boundary across prompt schema, normalization, ledger, validation, and popup rendering. Model-reported facts, inferences, uncertainty, and unsupported claims are kept distinct from source evidence; AI claim support is intentionally unverified until a human reviews it.
+- Replaced backend origin reflection with an exact `BACKEND_ALLOWED_ORIGINS` allowlist. Default local origins work for development, while hosted browser access must be configured deliberately; contract tests now cover allowed preflight and rejected untrusted origins.
+- Hardened `local-dev-server.js` path containment with `path.relative()` and malformed-URL rejection, replacing the string-prefix check. The server now exposes pure helpers without listening on import, allowing the real containment boundary to be regression-tested safely.
+- Removed the backend's predictable seeded end-user account and password. Contract tests now prove the old credentials cannot authenticate; they also cover partial admin updates so omitted fields do not erase persisted account data.
+- Moved user-login rate limiting ahead of password verification and added registration/admin-login limits. Contract tests now prove repeated invalid user and admin attempts are throttled before authentication can succeed.
+- Added durable exact-draft Trello comment attempt tracking. A post-send failure is treated as ambiguous, blocks automatic retry of that draft, and directs the user to verify the card manually before any new external action.
+- Enforced valid, unique normalized emails at registration and admin update time. Contract tests cover malformed registration input plus malformed and duplicate admin edits.
+- Corrected the phase ledger and external-blocker register scope: phase-artifact coverage is no longer presented as product completion, and the completion matrix/final verification report explicitly control readiness claims.
+- Reconciled `API_USAGE_AUDIT.md` with actual backend routes: nonexistent aggregate/detail endpoints and the inactive legacy `adminApi.js` are now explicitly marked as not implemented rather than active controls.
+- Corrected active top-level product documentation: README and Power-Up status now state the verified local scope, and unverified customer-style quotes were replaced with explicitly illustrative uses.
+- Corrected backend request-body error semantics: malformed JSON now returns `400` and oversized bodies `413` instead of a generic runtime `500`; contract coverage uses a raw invalid request body.
+- Hardened local backend sessions: expired or malformed-expiry sessions fail closed, active-session metrics exclude expired records, and persisted token hashes use HMAC-SHA-256 keyed by the required session secret.
+- Restricted the default local JSON runtime store to owner-only POSIX permissions and added contract checks without mutating shared temporary directories.
+- Disabled the unimplemented service-restart endpoint rather than claiming a restart; it now records a blocked attempt and returns `503`.
+- Rewrote stale README and Power-Up guide material that promised ground-truth validation, accuracy metrics, fixed speed/cost ranges, or outdated provider details. Current docs state the verified local scope, unmeasured limits, and review boundary.

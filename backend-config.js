@@ -13,10 +13,23 @@ function env() {
     TRELLO_APP_KEY: process.env.TRELLO_APP_KEY || "",
     TRELLO_APP_NAME: process.env.TRELLO_APP_NAME || "Summarize This",
     PROXY_ENDPOINT: process.env.PROXY_ENDPOINT || "",
+    BACKEND_ALLOWED_ORIGINS: process.env.BACKEND_ALLOWED_ORIGINS || "http://127.0.0.1:17117,http://localhost:17117",
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
     GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || ""
   };
+}
+
+function allowedBackendOrigins() {
+  return String(env().BACKEND_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter((origin) => /^https?:\/\/[^/]+$/i.test(origin));
+}
+
+function isAllowedBackendOrigin(origin) {
+  const normalized = String(origin || "").trim().replace(/\/$/, "");
+  return Boolean(normalized) && allowedBackendOrigins().includes(normalized);
 }
 
 function missingEnvForBackend() {
@@ -104,6 +117,8 @@ const exported = {
   get PROXY_ENDPOINT() {
     return env().PROXY_ENDPOINT;
   },
+  allowedBackendOrigins,
+  isAllowedBackendOrigin,
   get OPENAI_API_KEY() {
     return env().OPENAI_API_KEY;
   },

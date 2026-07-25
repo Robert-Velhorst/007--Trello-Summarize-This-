@@ -19,7 +19,9 @@ Previous: 2026-07-12
 | PDF/Word/Excel/image OCR extraction | Partial | Framework/stubs exist; shipped flow remains metadata-only |
 | Batch execution | Partial | Manual-first queue review exists; unattended execution is not shipped |
 | Trello description writeback | Missing | Not implemented |
-| Production-ready backend/admin subsystem | Partial | Functional in-memory backend exists with auth, credits, admin API. Not production-grade (no DB, plaintext passwords). Hardened with security headers in Phase 115. |
+| Production-ready backend/admin subsystem | Partial | Functional local backend exists with auth, credits, admin API, and salted user password hashes. Not production-grade yet (no production DB deployment, env-based admin auth, limited ops hardening). Hardened with security headers in Phase 115. |
+| Backend payment and webhook processing | Missing | Purchase and Stripe webhook routes deliberately return an explicit unavailable response until verified signatures, reconciliation, and provider integration exist; no credits are granted from client input. |
+| Backend unattended batch execution | Missing | The backend deliberately rejects `/api/batch/jobs/:id/run`; reviewed popup execution persists only observed results and must not fabricate analysis or completion. |
 | Required audit/verification docs | Implemented | All required docs present under `docs/` and updated for Phase 115 |
 | Manual Trello runtime verification evidence | Implemented | User-performed live Trello verification completed on 2026-07-12 |
 | Measured accuracy proof | Missing | Confidence is a review signal, not measured correctness proof |

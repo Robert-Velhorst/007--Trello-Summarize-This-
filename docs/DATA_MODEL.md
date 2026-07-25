@@ -66,13 +66,13 @@ Date: 2026-07-23 (Phase 005)
 }
 ```
 
-### Backend User (in-memory store — not persisted)
+### Backend User (local JSON runtime store — not production persistence)
 
 ```
 {
   id: UUID,
   email: string,
-  passwordHash: string (plaintext in current implementation — NOT production safe),
+  passwordHash: string (salted hash in current implementation),
   name: string,
   role: "user" | "admin",
   credits: number,
@@ -89,8 +89,8 @@ Date: 2026-07-23 (Phase 005)
 | Settings | Member-private (Trello) | Only the individual Trello member can read/write |
 | Ledger history | Member-private (Trello) | Only the individual Trello member can read/write |
 | Export records | Member-private (Trello) | Only the individual Trello member can read/write |
-| Backend users | In-memory store | Server-side; isolated per session |
-| Backend credits | In-memory store | Per-user; not shared |
+| Backend users | Local JSON runtime store | Server-side; isolated per session; unsuitable for production deployment |
+| Backend credits | Local JSON runtime store | Per-user; not shared; not payment-provider reconciled |
 
 ## Persistence
 
@@ -98,5 +98,5 @@ Date: 2026-07-23 (Phase 005)
 |---|---|---|
 | Settings | Trello member-private storage | Survives browser restarts |
 | Ledger history | Trello member-private storage | Survives browser restarts |
-| Backend state | In-memory (RAM) | Lost on server restart — not production safe |
+| Backend state | Local JSON runtime file | Survives a normal process restart; created owner-only on POSIX hosts, but is not a production database, backup solution, or multi-instance store |
 | AI provider keys | Trello member-private storage | Never sent to any server by default |

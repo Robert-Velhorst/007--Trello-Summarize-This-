@@ -2,6 +2,8 @@
 
 Date: 2026-07-23
 
+> Scope notice: This register lists phases blocked specifically by external dependencies. It is not an exhaustive product-gap list and does not mean every unlisted phase is production-complete. See `docs/GOAL_COMPLETION_MATRIX.md` and `docs/FINAL_VERIFICATION_REPORT.md` for the controlling partial/missing/disabled status.
+
 ## Strictly Blocked Phases (Truthful Audit Assessment)
 
 Per the **No False Completion Rule** in the prompt:

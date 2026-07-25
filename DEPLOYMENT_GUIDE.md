@@ -1,5 +1,7 @@
 # Summarize This - Deployment Guide
 
+> Historical note: this guide reflects an earlier deployment plan and should not be treated as the current source of truth for shipped scope or production readiness. Use the audit and verification documents under `docs/` for the current verified state.
+
 Complete guide for deploying the Summarize This Trello Power-Up to production.
 
 ## Prerequisites

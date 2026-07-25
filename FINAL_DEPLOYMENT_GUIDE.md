@@ -1,5 +1,7 @@
 # 🚀 Final Deployment Guide - Confidence and Validation System
 
+> Historical note: this guide documents an earlier deployment milestone and should not be treated as the current source of truth for shipped scope, active files, or production readiness. Use the audit and verification documents under `docs/` for the current verified state.
+
 ## ✅ Configuration Complete
 
 Your Trello Power-Up is configured to use evidence-backed confidence scoring, validation findings, review controls, and safe export/postback approval.

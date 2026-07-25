@@ -92,8 +92,13 @@ assert.equal(packageJson.scripts["doctor:backend"], "node backend-doctor.js");
 assert.equal(packageJson.scripts.test, "node test.js && node backend.test.js");
 const localServerText = fs.readFileSync(path.join(__dirname, "local-dev-server.js"), "utf8");
 assert.match(localServerText, /path\.normalize/);
-assert.match(localServerText, /startsWith\(ROOT\)/);
+assert.match(localServerText, /path\.relative\(ROOT, resolved\)/);
+assert.match(localServerText, /require\.main === module/);
 assert.match(localServerText, /Open http:\/\/\$\{HOST\}:\$\{PORT\}\/connector\.html/);
+const LocalDevServer = require("./local-dev-server");
+assert.equal(LocalDevServer.safePathname("/%E0%A4%A"), null);
+assert.equal(LocalDevServer.resolveFile("/connector.html"), path.join(__dirname, "connector.html"));
+assert.equal(LocalDevServer.isPathInsideRoot(path.resolve(__dirname, "..", `${path.basename(__dirname)}-escape`, "secret.txt")), false);
 const doctorText = fs.readFileSync(path.join(__dirname, "doctor.js"), "utf8");
 assert.match(doctorText, /Doctor checks passed/);
 assert.match(doctorText, /connector\.html/);
@@ -242,7 +247,13 @@ assert.match(popupText, /color-scheme:\s*light dark/);
 assert.match(popupText, /prefers-color-scheme:\s*dark/);
 assert.match(popupText, /function sanitizeUserVisibleError/);
 assert.match(popupText, /Provider message: " \+ sanitizeUserVisibleError\(error\)/);
-assert.match(popupText, /Could not post the comment: " \+ sanitizeUserVisibleError\(error\)/);
+assert.match(popupText, /Could not confirm the Trello comment outcome: " \+ sanitizeUserVisibleError\(error\)/);
+assert.match(popupText, /function trelloCommentAttemptKey/);
+assert.match(popupText, /summarizeThisTrelloCommentAttempts/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "pending"\)/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "posted"\)/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "ambiguous"\)/);
+assert.match(popupText, /Check the Trello card manually before posting again/);
 assert.match(popupText, /built-in summarizer/);
 assert.match(popupText, /metadata-only until approval/);
 assert.match(popupText, /Trello app key is not configured for comment lookup/);
@@ -269,6 +280,13 @@ assert.match(popupText, /id="batchProgressList"/);
 assert.match(popupText, /id="batchManualChecklistFallback"/);
 assert.match(popupText, /id="copyDecisionPacketButton"/);
 assert.match(popupText, /id="exportManualCopyFallback"/);
+assert.match(popupText, /id="aiClaimBoundaryPanel"/);
+assert.match(popupText, /id="aiFactsList"/);
+assert.match(popupText, /id="aiInferencesList"/);
+assert.match(popupText, /id="aiUncertaintyList"/);
+assert.match(popupText, /id="aiUnsupportedClaimsList"/);
+assert.match(popupText, /function renderAiClaimBoundary/);
+assert.match(popupText, /AI-provided statements are shown separately from the card evidence above/);
 assert.match(popupText, /function renderBatchExecutionReview/);
 assert.match(popupText, /function openFirstBatchCard/);
 assert.match(popupText, /function copyBatchManualChecklist/);
@@ -278,6 +296,10 @@ assert.match(popupText, /decisionHandoffPacketForLedgerRun/);
 assert.match(popupText, /function renderBatchProgress/);
 assert.match(popupText, /function updateBatchProgressFromControl/);
 assert.match(popupText, /Batch progress saved privately/);
+assert.match(popupText, /var finalBatchStatus = blockedCount \? "needs-attention" : "review-required"/);
+assert.match(popupText, /card\(s\) analyzed and require human review/);
+assert.match(popupText, /no Trello card was changed/);
+assert.doesNotMatch(popupText, /Selected cards were analyzed, stored privately/);
 assert.match(popupText, /approved .* export is shown below for manual copy/);
 assert.match(popupText, /approved batch handoff report is shown below/);
 assert.match(popupText, /approved manual batch checklist is shown below/);
@@ -894,6 +916,10 @@ const aiSummary = SummarizeThis.normalizeAIAnalysis({
   missingInfo: ["Invoice amount is not in the card"],
   unclearPoints: [{ text: "Card says billing is complete but invoice amount is missing" }],
   unresolvedQuestions: ["Who owns the invoice amount confirmation?"],
+  facts: ["The card includes a billing checklist."],
+  inferences: ["Billing may still need follow-up."],
+  uncertainty: ["The invoice amount is not visible in the card."],
+  unsupportedClaims: ["The client has approved payment."],
   evidenceClaims: [{
     claim: "Billing is still open",
     source: "checklist",
@@ -916,6 +942,10 @@ assert.deepEqual(aiSummary.unclearPoints, ["Card says billing is complete but in
 assert.deepEqual(aiSummary.unresolvedQuestions, ["Who owns the invoice amount confirmation?"]);
 assert.equal(aiSummary.evidenceClaims[0].claim, "Billing is still open");
 assert.equal(aiSummary.validationFindings[0], "Attachment contents were not verified");
+assert.deepEqual(aiSummary.facts, ["The card includes a billing checklist."]);
+assert.deepEqual(aiSummary.inferences, ["Billing may still need follow-up."]);
+assert.deepEqual(aiSummary.uncertainty, ["The invoice amount is not visible in the card."]);
+assert.deepEqual(aiSummary.unsupportedClaims, ["The client has approved payment."]);
 assert.equal(aiSummary.confidenceReason, "Description and checklist are present.");
 assert.equal(aiSummary.confidence, "high");
 
@@ -1168,7 +1198,8 @@ const aiStructuredRun = CardIntelligenceLedger.createAnalysisRun(operationalCard
     model: "gpt-4o-mini",
     tokens: 500,
     cost: 0.001
-  }
+  },
+  source: "ai"
 }, {
   now: "2026-06-29T12:01:00.000Z"
 });
@@ -1181,6 +1212,12 @@ assert.ok(aiStructuredRun.result.missingInfo.some(item => item.text.includes("In
 assert.ok(aiStructuredRun.result.unresolvedQuestions.some(item => item.text.includes("Who owns the invoice amount confirmation")));
 assert.ok(aiStructuredRun.result.evidenceClaims.some(item => item.claim.includes("Billing is still open")));
 assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Attachment contents")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.id === "ai-output-unverified"));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Inference (not a verified fact)")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Uncertainty:")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Unsupported claim:")));
+assert.ok(aiStructuredRun.result.evidenceClaims.every(item => item.confidence === "uncertain"));
+assert.deepEqual(aiStructuredRun.result.inferences, ["Billing may still need follow-up."]);
 assert.equal(aiStructuredRun.result.confidenceReason, "Description and checklist are present.");
 
 const history = CardIntelligenceLedger.mergeLedgerHistory([], { lastRun: run }, 25);

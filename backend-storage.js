@@ -4,6 +4,8 @@ const fsp = fs.promises;
 const path = require("node:path");
 
 const DEFAULT_RUNTIME_STORE_PATH = path.join(__dirname, "database", "runtime", "local-backend-store.json");
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 function createId(prefix) {
   const id = typeof crypto.randomUUID === "function"
@@ -44,20 +46,7 @@ function defaultState() {
       createdAt,
       updatedAt: createdAt
     },
-    users: [
-      {
-        id: "seed-user",
-        email: "test@example.com",
-        passwordHash: "",
-        passwordSalt: "",
-        name: "Test User",
-        credits: 100,
-        role: "user",
-        suspended: false,
-        createdAt,
-        updatedAt: createdAt
-      }
-    ],
+    users: [],
     sessions: [],
     summaries: [],
     transactions: [],
@@ -87,10 +76,15 @@ class LocalBackendStore {
   }
 
   async initialize(seedPasswordRecord) {
-    await fsp.mkdir(path.dirname(this.filePath), { recursive: true });
+    const directory = path.dirname(this.filePath);
+    const createdDirectory = await fsp.mkdir(directory, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+    if (this.filePath === DEFAULT_RUNTIME_STORE_PATH || createdDirectory === directory) {
+      await fsp.chmod(directory, PRIVATE_DIRECTORY_MODE);
+    }
     try {
       const raw = await fsp.readFile(this.filePath, "utf8");
       this.state = JSON.parse(raw);
+      await fsp.chmod(this.filePath, PRIVATE_FILE_MODE);
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
       this.state = defaultState();
@@ -130,8 +124,10 @@ class LocalBackendStore {
   async persist() {
     this.state.meta.updatedAt = nowIso();
     const next = `${this.filePath}.tmp`;
-    await fsp.writeFile(next, JSON.stringify(this.state, null, 2));
+    await fsp.writeFile(next, JSON.stringify(this.state, null, 2), { mode: PRIVATE_FILE_MODE });
+    await fsp.chmod(next, PRIVATE_FILE_MODE);
     await fsp.rename(next, this.filePath);
+    await fsp.chmod(this.filePath, PRIVATE_FILE_MODE);
   }
 
   async snapshot() {
@@ -271,31 +267,12 @@ class LocalBackendStore {
   }
 }
 
-class PostgresBackendStore extends LocalBackendStore {
-  constructor(options = {}) {
-    super(options);
-    this.connection = options.connection || null;
-  }
-
-  async initialize(seedPasswordRecord) {
-    if (this.connection && typeof this.connection.initialize === "function") {
-      await this.connection.initialize();
-    }
-    return super.initialize(seedPasswordRecord);
-  }
-}
-
 async function createBackendStore(options = {}) {
   const normalizedOptions = normalizeBackendStoreOptions(options);
-  const storeType = normalizedOptions.storeType || process.env.BACKEND_STORE || (process.env.DATABASE_URL ? "postgres" : "local");
+  const storeType = normalizedOptions.storeType || process.env.BACKEND_STORE || "local";
   const seedPasswordRecord = normalizedOptions.seedPasswordRecord || null;
-  if (storeType === "postgres") {
-    const connection = normalizedOptions.connection || require("./database/connection");
-    const store = new PostgresBackendStore({
-      filePath: normalizedOptions.filePath,
-      connection
-    });
-    return store.initialize(seedPasswordRecord);
+  if (storeType !== "local") {
+    throw new Error(`Unsupported backend store "${storeType}". Only the local JSON runtime store is implemented.`);
   }
 
   const store = new LocalBackendStore({
@@ -309,7 +286,6 @@ module.exports = {
   createId,
   DEFAULT_RUNTIME_STORE_PATH,
   LocalBackendStore,
-  PostgresBackendStore,
   normalizeBackendStoreOptions,
   resolveBackendFilePath
 };

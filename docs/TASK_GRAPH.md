@@ -56,7 +56,7 @@ Phase 115: Final Human-Operator Readiness Test
   └─ Requires: real user study with ground truth labels + live Trello environment
 
 [BLOCKED] Production backend
-  └─ Requires: database provisioning + password hashing + HTTPS + rate limiting
+  └─ Requires: database provisioning + HTTPS + stronger admin credential handling + rate limiting
 
 [BLOCKED] Trello description writeback
   └─ Requires: Trello REST API write permissions + safe-write flow design

@@ -1,9 +1,11 @@
 # Phase Status Ledger
 
-Date: 2026-07-23 (Final Ledger Audit)
+Date: 2026-07-25 (scope correction)
+
+> Scope notice: This ledger records whether a phase has a local implementation or audit artifact. It is **not** a claim that the full product is complete or production-ready. The controlling product-status source is [`GOAL_COMPLETION_MATRIX.md`](GOAL_COMPLETION_MATRIX.md), which records the shipped scope as partial and names missing, disabled, and externally blocked capabilities. Where the two documents differ, the completion matrix and final verification report control.
 
 Status meanings:
-- `Implemented`: completed with working code, verifiable test assertions, or complete truthful documentation artifacts in `docs/`
+- `Implemented`: a local phase deliverable exists and has the evidence named in the row; this does not imply production readiness or completion of related product capabilities
 - `Blocked`: cannot be completed from repo-only work without external accounts, credentials, or live production infrastructure (see `docs/BLOCKED_PHASES.md`)
 
 | Phase | Title | Status | Notes |
@@ -123,4 +125,4 @@ Status meanings:
 | 112 | Versioning and changelog discipline | Implemented | See `docs/VERSIONING_AND_CHANGELOG_DISCIPLINE.md` |
 | 113 | Regression baseline | Implemented | See `docs/REGRESSION_BASELINE.md` |
 | 114 | Maintenance and refactoring review | Implemented | See `docs/MAINTENANCE_AND_REFACTORING_REVIEW.md` |
-| 115 | Final human-operator readiness test | Implemented | Verified readiness, tests fixed, hardened |
+| 115 | Final human-operator readiness test | Implemented (local scope) | Local verification evidence exists; it does not replace required live provider, Trello, deployment, or production-operations verification |

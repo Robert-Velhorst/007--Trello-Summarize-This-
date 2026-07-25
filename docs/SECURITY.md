@@ -7,7 +7,10 @@ Date: 2026-07-23 (Phase 115)
 **Critical rules:**
 - API keys (OpenAI, Anthropic, Google) are stored in browser member-private Trello storage only. They are never logged or transmitted to the Trello server.
 - Proxy endpoint credentials are configured separately from browser-held keys.
-- Backend JWT secret and admin password must be provided as environment variables — never hardcoded.
+- Backend session-hash secret (`JWT_SECRET`, retained environment-variable name) and admin password must be provided as environment variables — never hardcoded.
+- The backend creates no default end-user account or predictable bootstrap password. Users must register explicitly; tests use disposable, isolated accounts.
+- Account emails are normalized and validated at registration and admin edit time; duplicate identities are rejected.
+- The local backend runtime-store directory is created with owner-only permissions (`0700`) and its JSON state file with owner-only permissions (`0600`) on POSIX hosts. The store is gitignored, but it remains a development-only persistence mechanism rather than a production secret store.
 - The `proxy/.dev.vars` file is `.gitignore`d and must never be committed.
 - Error messages are sanitized in all three integration modules (`ai-providers.js`, `trello-integration.js`, `attachment-processor.js`) to strip tokens, keys, and sensitive URLs before display.
 
@@ -45,17 +48,17 @@ The backend API (`backend-app.js`) now sends:
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: no-referrer`
-- CORS headers with preflight handling
+- CORS headers with preflight handling only for an explicit allowlist (`BACKEND_ALLOWED_ORIGINS`); arbitrary browser origins are rejected before route handling
 
 ## Known Security Gaps (Not Production-Safe)
 
 | Gap | Risk | Mitigation Required |
 |---|---|---|
-| Backend stores passwords in plaintext | High | Add bcrypt or argon2 hashing before production deployment |
-| In-memory token store | Medium | Lost on restart; add persistent session store for production |
-| No rate limiting on API endpoints | Medium | Add rate limiting middleware before production deployment |
+| Backend uses local salted password hashes for user accounts, but admin auth still relies on environment credentials and the overall backend lacks production hardening | High | Keep user hashing, move admin auth to a stronger model, and add full production backend hardening before deployment |
+| Local JSON token store | Medium | Not suitable for multi-instance production; migrate sessions to production storage |
+| Local account-based rate limits only | Medium | Registration, user login, admin login, and summarization are throttled; add distributed per-IP limits before public deployment |
 | No HTTPS enforcement in backend | Medium | Run behind reverse proxy (nginx/caddy) with TLS |
-| Backend CORS allows all origins | Low (dev only) | Restrict to known origins in production |
+| Hosted Power-Up origin must be configured | Medium | Set `BACKEND_ALLOWED_ORIGINS` to the exact public Power-Up origin before enabling browser backend calls |
 
 ## Update Check Safety
 

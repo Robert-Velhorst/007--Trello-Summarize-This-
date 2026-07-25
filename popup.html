@@ -830,6 +830,19 @@
         <ul id="evidenceList" class="evidence-list"></ul>
       </section>
 
+      <section id="aiClaimBoundaryPanel" class="panel hidden">
+        <h2 class="section-title">AI claim boundary</h2>
+        <p id="aiClaimBoundarySummary" class="section-body"></p>
+        <h3 class="trust-heading">Model-reported facts (not independently verified)</h3>
+        <ul id="aiFactsList" class="compact-list"></ul>
+        <h3 class="trust-heading">Inferences</h3>
+        <ul id="aiInferencesList" class="compact-list"></ul>
+        <h3 class="trust-heading">Uncertainty</h3>
+        <ul id="aiUncertaintyList" class="compact-list"></ul>
+        <h3 class="trust-heading">Unsupported claims</h3>
+        <ul id="aiUnsupportedClaimsList" class="compact-list"></ul>
+      </section>
+
       <section class="panel">
         <h2 class="section-title">Attachment facts</h2>
         <p id="attachmentFactsSummary" class="section-body">Attachment facts will appear after analysis.</p>
@@ -2442,6 +2455,10 @@
           missingInfo: mergeConsensusList(summaries, "missingInfo", localAnalysis.summary.missingInfo),
           unclearPoints: mergeConsensusList(summaries, "unclearPoints", localAnalysis.summary.unclearPoints),
           unresolvedQuestions: mergeConsensusList(summaries, "unresolvedQuestions", localAnalysis.summary.unresolvedQuestions),
+          facts: mergeConsensusList(summaries, "facts", localAnalysis.summary.facts),
+          inferences: mergeConsensusList(summaries, "inferences", localAnalysis.summary.inferences),
+          uncertainty: mergeConsensusList(summaries, "uncertainty", localAnalysis.summary.uncertainty),
+          unsupportedClaims: mergeConsensusList(summaries, "unsupportedClaims", localAnalysis.summary.unsupportedClaims),
           validationFindings: mergeConsensusList(summaries, "validationFindings", localAnalysis.summary.validationFindings).concat(errors.slice(0, 3)),
           evidenceClaims: mergeConsensusEvidence(summaries, localAnalysis.summary.evidenceClaims),
           confidenceReason: consensusConfidenceReason(results, errors)
@@ -2849,6 +2866,7 @@
         renderOperationalList("unclearPointsList", result ? result.unclearPoints : [], "No unclear or conflicting points detected.");
         renderOperationalList("validationList", result ? result.validationFindings : [], "No validation findings.");
         renderEvidence(result ? result.evidence : []);
+        renderAiClaimBoundary(result);
         renderAttachmentFacts(cardData);
         renderListContext(ledgerRun && ledgerRun.cardSnapshot ? ledgerRun.cardSnapshot.listContext : null);
         renderListPlanningBrief(cardData);
@@ -2941,6 +2959,22 @@
           li.textContent = item;
           list.appendChild(li);
         });
+      }
+
+      function renderAiClaimBoundary(result) {
+        var panel = document.getElementById("aiClaimBoundaryPanel");
+        var facts = result && Array.isArray(result.facts) ? result.facts : [];
+        var inferences = result && Array.isArray(result.inferences) ? result.inferences : [];
+        var uncertainty = result && Array.isArray(result.uncertainty) ? result.uncertainty : [];
+        var unsupported = result && Array.isArray(result.unsupportedClaims) ? result.unsupportedClaims : [];
+        var hasClaims = facts.length || inferences.length || uncertainty.length || unsupported.length;
+        panel.classList.toggle("hidden", !hasClaims);
+        if (!hasClaims) return;
+        document.getElementById("aiClaimBoundarySummary").textContent = "AI-provided statements are shown separately from the card evidence above and require human review before use.";
+        renderList("aiFactsList", facts, "No model-reported facts.");
+        renderList("aiInferencesList", inferences, "No model-reported inferences.");
+        renderList("aiUncertaintyList", uncertainty, "No uncertainty reported by the model.");
+        renderList("aiUnsupportedClaimsList", unsupported, "No unsupported claims reported by the model.");
       }
 
       function renderOperationalList(id, items, emptyText) {
@@ -3610,6 +3644,37 @@
         recordExport("trello-comment-draft", "clipboard", null, true);
       }
 
+      function trelloCommentAttemptKey(cardId, text) {
+        return String(cardId || "") + ":" + compactHash(String(text || ""));
+      }
+
+      async function readTrelloCommentAttempt(cardId, text) {
+        var attempts = await readPrivateObject("summarizeThisTrelloCommentAttempts", {});
+        if (!attempts || typeof attempts !== "object" || Array.isArray(attempts)) attempts = {};
+        var key = trelloCommentAttemptKey(cardId, text);
+        return { key: key, attempt: attempts[key] || null };
+      }
+
+      async function saveTrelloCommentAttempt(cardId, text, status) {
+        var attempts = await readPrivateObject("summarizeThisTrelloCommentAttempts", {});
+        if (!attempts || typeof attempts !== "object" || Array.isArray(attempts)) attempts = {};
+        var key = trelloCommentAttemptKey(cardId, text);
+        attempts[key] = {
+          cardId: String(cardId || ""),
+          draftHash: compactHash(String(text || "")),
+          status: status,
+          updatedAt: new Date().toISOString()
+        };
+        var retained = {};
+        Object.keys(attempts).sort(function (left, right) {
+          return String(attempts[right].updatedAt || "").localeCompare(String(attempts[left].updatedAt || ""));
+        }).slice(0, 100).forEach(function (entryKey) {
+          retained[entryKey] = attempts[entryKey];
+        });
+        await writePrivateObject("summarizeThisTrelloCommentAttempts", retained);
+        return retained[key];
+      }
+
       // ============================================================
 // FIX: postApprovedComment() in popup.html
 // ============================================================
@@ -3643,6 +3708,15 @@
           document.getElementById("postbackStatus").textContent = "Posting is not available in this Power-Up runtime. Copy the approved draft instead.";
           return;
         }
+        var previousAttempt = await readTrelloCommentAttempt(lastCardData.id, text);
+        if (previousAttempt.attempt && previousAttempt.attempt.status === "posted") {
+          document.getElementById("postbackStatus").textContent = "This exact draft is already recorded as posted. Draft a new comment if another Trello update is needed.";
+          return;
+        }
+        if (previousAttempt.attempt && (previousAttempt.attempt.status === "pending" || previousAttempt.attempt.status === "ambiguous")) {
+          document.getElementById("postbackStatus").textContent = "The outcome of this exact draft is uncertain. Check the Trello card manually before posting again; copy the draft instead if needed.";
+          return;
+        }
         if (!window.confirm("Post this exact reviewed comment to Trello?")) {
           return;
         }
@@ -3651,6 +3725,7 @@
         document.getElementById("postbackStatus").textContent = "Posting reviewed comment to Trello...";
 
         var posted = false;
+        var attemptRecorded = false;
         try {
           var rest = await t.getRestApi();
           if (!rest || typeof rest.getToken !== "function") {
@@ -3676,6 +3751,9 @@
             "/actions/comments?key=" + encodeURIComponent(appKey) +
             "&token=" + encodeURIComponent(token);
 
+          await saveTrelloCommentAttempt(lastCardData.id, text, "pending");
+          attemptRecorded = true;
+
           var response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -3688,13 +3766,19 @@
             throw new Error("Trello API request failed (status " + response.status + "). " + bodyText);
           }
 
+          await saveTrelloCommentAttempt(lastCardData.id, text, "posted");
           elements.confidencePill.textContent = "Comment posted";
           document.getElementById("postbackStatus").textContent = "Reviewed comment posted to Trello.";
           await recordExport("trello-comment", "trello-comment", null, true);
           approval.checked = false;
           posted = true;
         } catch (error) {
-          document.getElementById("postbackStatus").textContent = "Could not post the comment: " + sanitizeUserVisibleError(error) + " Copy the approved draft instead.";
+          if (attemptRecorded) {
+            await saveTrelloCommentAttempt(lastCardData.id, text, "ambiguous");
+          }
+          document.getElementById("postbackStatus").textContent = attemptRecorded
+            ? "Could not confirm the Trello comment outcome: " + sanitizeUserVisibleError(error) + " Check the card manually before posting this exact draft again; copy the draft instead."
+            : "Could not prepare the comment post: " + sanitizeUserVisibleError(error) + " Copy the approved draft instead.";
         } finally {
           updatePostbackControls();
           if (posted) {
@@ -4025,15 +4109,28 @@
             }
           }
 
+          var finalProgress = await loadBatchProgress(review);
+          var finalSnapshot = SummarizeThis.createBatchProgressSnapshot(review, finalProgress.progress);
+          var analyzedCount = finalSnapshot.queue.filter(function (item) { return item.status === "analyzed"; }).length;
+          var blockedCount = finalSnapshot.queue.filter(function (item) { return item.status === "blocked"; }).length;
+          var finalBatchStatus = blockedCount ? "needs-attention" : "review-required";
+          var completionSummary = blockedCount
+            ? analyzedCount + " card(s) analyzed; " + blockedCount + " card(s) blocked and need attention."
+            : analyzedCount + " card(s) analyzed and require human review.";
+
           if (backendActive && backendJob) {
             await syncBackendBatchStatus(backendJob.id, {
-              status: "completed",
+              status: finalBatchStatus,
               finishedAt: new Date().toISOString(),
-              summary: "Reviewed batch run completed from the popup. Trello write actions remained off."
+              summary: completionSummary + " Trello write actions remained off."
             }, settings);
-            status.textContent = "Reviewed batch run finished. Selected cards were analyzed, stored privately, and mirrored to the backend job ledger; no Trello card was changed.";
+            status.textContent = blockedCount
+              ? "Batch analysis needs attention: " + completionSummary + " Progress was stored privately and mirrored to the backend job ledger; no Trello card was changed."
+              : "Batch analysis finished: " + completionSummary + " Results were stored privately and mirrored to the backend job ledger; no Trello card was changed.";
           } else {
-            status.textContent = "Reviewed batch run finished. Selected cards were analyzed and stored privately; no Trello card was changed.";
+            status.textContent = blockedCount
+              ? "Batch analysis needs attention: " + completionSummary + " Progress was stored privately; no Trello card was changed."
+              : "Batch analysis finished: " + completionSummary + " Results were stored privately; no Trello card was changed.";
           }
         } finally {
           batchExecutionRunning = false;

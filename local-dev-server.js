@@ -22,17 +22,27 @@ const MIME_TYPES = {
 };
 
 function safePathname(requestUrl) {
-  const parsed = new URL(requestUrl, `http://${HOST}:${PORT}`);
-  const pathname = decodeURIComponent(parsed.pathname);
-  const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
-  return normalized === "/" ? "/index.html" : normalized;
+  try {
+    const parsed = new URL(requestUrl, `http://${HOST}:${PORT}`);
+    const pathname = decodeURIComponent(parsed.pathname).replace(/\\/g, "/");
+    const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
+    return normalized === "/" ? "/index.html" : normalized;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isPathInsideRoot(resolved) {
+  const relative = path.relative(ROOT, resolved);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
 function resolveFile(requestUrl) {
   const pathname = safePathname(requestUrl);
+  if (!pathname) return null;
   const resolved = path.resolve(ROOT, `.${pathname}`);
 
-  if (!resolved.startsWith(ROOT)) {
+  if (!isPathInsideRoot(resolved)) {
     return null;
   }
 
@@ -96,10 +106,23 @@ function gracefulShutdown(signal) {
   setTimeout(() => process.exit(1), 3000);
 }
 
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+function startLocalServer() {
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  server.listen(PORT, HOST, () => {
+    console.log(`Summarize This local server running at http://${HOST}:${PORT}/`);
+    console.log(`Open http://${HOST}:${PORT}/connector.html for the Trello connector entrypoint.`);
+  });
+  return server;
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`Summarize This local server running at http://${HOST}:${PORT}/`);
-  console.log(`Open http://${HOST}:${PORT}/connector.html for the Trello connector entrypoint.`);
-});
+module.exports = {
+  safePathname,
+  isPathInsideRoot,
+  resolveFile,
+  startLocalServer
+};
+
+if (require.main === module) {
+  startLocalServer();
+}

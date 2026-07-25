@@ -3,9 +3,9 @@ const config = require("./backend-config");
 const readiness = config.backendReadiness();
 const checks = [
   {
-    label: "JWT secret configured",
+    label: "Session hash secret configured",
     ok: !readiness.missing.includes("JWT_SECRET"),
-    detail: readiness.missing.includes("JWT_SECRET") ? "Set JWT_SECRET for login token signing." : "Present"
+    detail: readiness.missing.includes("JWT_SECRET") ? "Set JWT_SECRET for keyed session-token hashing." : "Present"
   },
   {
     label: "Admin password configured",
@@ -13,9 +13,9 @@ const checks = [
     detail: readiness.missing.includes("ADMIN_PASSWORD") ? "Set ADMIN_PASSWORD for the local admin bootstrap account." : "Present"
   },
   {
-    label: "Database config present",
-    ok: readiness.optional.DATABASE_URL,
-    detail: readiness.optional.DATABASE_URL ? "DATABASE_URL present" : "Optional for in-memory mode; required for persistent backend"
+    label: "Database runtime boundary",
+    ok: true,
+    detail: readiness.optional.DATABASE_URL ? "DATABASE_URL is configured but ignored: only the local JSON store is implemented." : "No DATABASE_URL configured; backend uses the local JSON store."
   },
   {
     label: "Proxy endpoint shape",

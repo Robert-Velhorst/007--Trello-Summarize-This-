@@ -17,7 +17,7 @@ The current shipped product is the static Trello Power-Up flow built around:
 - `trello-integration.js` — Trello REST API integration layer with error sanitization.
 - `proxy/cloudflare-worker.mjs` — Optional Cloudflare Worker proxy for AI calls.
 - `local-dev-server.js` — Static file server for local development. Hardened with CORS, security headers, and graceful shutdown in Phase 115.
-- `backend-app.js` / `backend-server.js` / `backend-config.js` — Backend API with in-memory store, user auth, admin panel, credit system, and summarize endpoint. Hardened with security headers and CORS in Phase 115.
+- `backend-app.js` / `backend-server.js` / `backend-config.js` — Backend API with a local JSON runtime store, user auth, admin panel, credit system, and summarize endpoint. Hardened with security headers and CORS in Phase 115.
 
 This surface supports:
 - Card analysis with evidence and validation display
@@ -52,7 +52,8 @@ This surface supports:
 - PDF, Word, Excel, and image OCR extraction are partial only. The repo contains framework code and legacy stubs, but the shipped Power-Up treats these as metadata-only.
 - Batch support is manual-first. The popup prepares reviewed queues and handoff material, but does not perform unattended full-card batch execution.
 - Proxy mode is implemented as an optional path, but requires external deployment and credentials.
-- Backend/admin subsystem exists and is functional (in-memory store), but is not verified as production-grade. No real database, no hashed passwords, no production auth.
+- Backend/admin subsystem exists and is functional with a local JSON runtime store, but is not verified as production-grade. User passwords use salted hashes; no production database or production-grade authentication system exists.
+- `DATABASE_URL` does not activate a PostgreSQL backend. The backend explicitly supports only the local JSON store and rejects an explicit non-local store request, avoiding a false persistence claim.
 
 ## Inactive Or Disconnected Areas
 
@@ -72,7 +73,7 @@ These areas should be treated as non-active until they are made runnable, tested
 - Historical docs may still be mistaken for current completion evidence if readers skip the audit documents.
 - Manual Trello runtime behaviors still need human verification because they cannot be fully automated in the local test harness.
 - Confidence remains a review signal, not a measured correctness guarantee.
-- Backend stores passwords in plaintext in memory — not production-safe.
+- Backend stores salted user password hashes in its local file-backed store, but it is still not production-safe because admin auth depends on environment credentials and the subsystem lacks production infrastructure hardening.
 
 ## Recommended Scope Baseline
 

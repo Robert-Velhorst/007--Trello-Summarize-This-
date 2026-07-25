@@ -16,7 +16,8 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
-const { startBackendServer } = require("./backend-server");
+const { PassThrough } = require("node:stream");
+const { createBackendApp } = require("./backend-app");
 const FakeProvider = require("./fake-provider");
 const SummarizeThis = require("./summarizer-core");
 const FeatureFlags = require("./feature-flags");
@@ -26,16 +27,26 @@ const FeatureFlags = require("./feature-flags");
 const ROOT = path.resolve(__dirname);
 
 function safePathname(requestUrl) {
-  const parsed = new URL(requestUrl, "http://127.0.0.1:17117");
-  const pathname = decodeURIComponent(parsed.pathname);
-  const normalized = path.normalize(pathname).replace(/^(\.\.([/\\]|$))+/, "");
-  return normalized === "/" ? "/index.html" : normalized;
+  try {
+    const parsed = new URL(requestUrl, "http://127.0.0.1:17117");
+    const pathname = decodeURIComponent(parsed.pathname).replace(/\\/g, "/");
+    const normalized = path.normalize(pathname).replace(/^(\.\.([/\\]|$))+/, "");
+    return normalized === "/" ? "/index.html" : normalized;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isPathInsideRoot(resolved) {
+  const relative = path.relative(ROOT, resolved);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
 function resolveFile(requestUrl) {
   const pathname = safePathname(requestUrl);
+  if (!pathname) return null;
   const resolved = path.resolve(ROOT, `.${pathname}`);
-  if (!resolved.startsWith(ROOT)) return null;
+  if (!isPathInsideRoot(resolved)) return null;
   return resolved;
 }
 
@@ -57,12 +68,15 @@ traversalAttempts.forEach((attempt) => {
   );
 });
 
+assert.equal(safePathname("/%E0%A4%A"), null, "Malformed URL encoding is rejected safely");
+assert.equal(isPathInsideRoot(path.resolve(ROOT, "..", `${path.basename(ROOT)}-escape`, "secret.txt")), false, "Sibling paths that share the root prefix are rejected");
+
 // Safe paths must resolve
 const safePaths = ["/connector.html", "/popup.html", "/summarizer-core.js"];
 safePaths.forEach((p) => {
   const resolved = resolveFile(p);
   assert.ok(resolved !== null, `Safe path resolves: ${p}`);
-  assert.ok(resolved.startsWith(ROOT), `Safe path is within ROOT: ${p}`);
+  assert.equal(isPathInsideRoot(resolved), true, `Safe path is within ROOT: ${p}`);
 });
 
 // ─── Phase 045: Adversarial inputs to normalizer ────────────────────────────
@@ -157,51 +171,70 @@ assert.match(sanitizedMsg, /redacted/, "Redaction marker present");
 // Backend cross-user isolation: user A's data must not be visible to user B
 // Uses in-memory store with two simulated users
 
-const http = require("node:http");
+function requestJson(app, method, targetPath, body, headers = {}) {
+  const payload = body === undefined ? "" : JSON.stringify(body);
+  const normalizedHeaders = Object.fromEntries(
+    Object.entries(Object.assign({
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload)
+    }, headers)).map(([key, value]) => [key.toLowerCase(), value])
+  );
 
-function httpRequest(options, body) {
-  return new Promise((resolve, reject) => {
-    const req = http.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
-        try {
-          resolve({ status: res.statusCode, body: JSON.parse(data) });
-        } catch {
-          resolve({ status: res.statusCode, body: data });
-        }
-      });
+  const req = new PassThrough();
+  req.method = method;
+  req.url = targetPath;
+  req.headers = normalizedHeaders;
+  req.socket = { remoteAddress: "127.0.0.1" };
+
+  const res = new PassThrough();
+  res.statusCode = 200;
+  res.headers = {};
+  res.setHeader = (name, value) => {
+    res.headers[String(name).toLowerCase()] = value;
+  };
+  res.getHeader = (name) => res.headers[String(name).toLowerCase()];
+  res.writeHead = (statusCode, responseHeaders = {}) => {
+    res.statusCode = statusCode;
+    Object.entries(responseHeaders).forEach(([name, value]) => res.setHeader(name, value));
+    return res;
+  };
+
+  const chunks = [];
+  const responsePromise = new Promise((resolve, reject) => {
+    res.on("data", (chunk) => {
+      chunks.push(Buffer.from(chunk));
     });
-    req.on("error", reject);
-    if (body) req.write(JSON.stringify(body));
-    req.end();
+    res.on("finish", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      try {
+        resolve({ status: res.statusCode, body: text ? JSON.parse(text) : null });
+      } catch {
+        resolve({ status: res.statusCode, body: text });
+      }
+    });
+    res.on("error", reject);
   });
-}
 
-const TEST_PORT = 18080;
-const reqOpts = (method, p, token) => ({
-  hostname: "127.0.0.1",
-  port: TEST_PORT,
-  path: p,
-  method,
-  headers: {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  if (payload) {
+    req.end(payload);
+  } else {
+    req.end();
   }
-});
+
+  return Promise.resolve(app.handle(req, res)).then(() => responsePromise);
+}
 
 async function runIsolationTests() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "summarize-this-adversarial-"));
   const storagePath = path.join(tempDir, "backend-store.json");
-  const { server } = await startBackendServer({
-    port: TEST_PORT,
+  const app = await createBackendApp({
     allowMissingEnv: true,
     filePath: storagePath
   });
 
   try {
     // Register two distinct users
-    const regA = await httpRequest(reqOpts("POST", "/api/auth/register"), {
+    const regA = await requestJson(app, "POST", "/api/auth/register", {
       email: "user-a@test.example",
       password: "pass-a-secure",
       name: "User A"
@@ -210,7 +243,7 @@ async function runIsolationTests() {
     const tokenA = regA.body.token;
     assert.ok(tokenA, "User A has token");
 
-    const regB = await httpRequest(reqOpts("POST", "/api/auth/register"), {
+    const regB = await requestJson(app, "POST", "/api/auth/register", {
       email: "user-b@test.example",
       password: "pass-b-secure",
       name: "User B"
@@ -223,7 +256,9 @@ async function runIsolationTests() {
     assert.notEqual(tokenA, tokenB, "User A and B have distinct tokens");
 
     // User A profile must not reveal User B's email
-    const profileA = await httpRequest(reqOpts("GET", "/api/user/profile", tokenA));
+    const profileA = await requestJson(app, "GET", "/api/user/profile", undefined, {
+      Authorization: `Bearer ${tokenA}`
+    });
     assert.equal(profileA.status, 200, "User A profile readable");
     assert.equal(profileA.body.user.email, "user-a@test.example", "User A sees own email");
     assert.ok(
@@ -232,7 +267,9 @@ async function runIsolationTests() {
     );
 
     // User B profile must not reveal User A's email
-    const profileB = await httpRequest(reqOpts("GET", "/api/user/profile", tokenB));
+    const profileB = await requestJson(app, "GET", "/api/user/profile", undefined, {
+      Authorization: `Bearer ${tokenB}`
+    });
     assert.equal(profileB.status, 200, "User B profile readable");
     assert.equal(profileB.body.user.email, "user-b@test.example", "User B sees own email");
     assert.ok(
@@ -241,33 +278,53 @@ async function runIsolationTests() {
     );
 
     // User B's token must not access admin endpoints
-    const adminWithUserB = await httpRequest(reqOpts("GET", "/api/admin/users", tokenB));
+    const adminWithUserB = await requestJson(app, "GET", "/api/admin/users", undefined, {
+      Authorization: `Bearer ${tokenB}`
+    });
     assert.notEqual(adminWithUserB.status, 200, "Non-admin token cannot access /api/admin/users");
 
     // No token must not access protected endpoints
-    const noToken = await httpRequest(reqOpts("GET", "/api/user/profile"));
+    const noToken = await requestJson(app, "GET", "/api/user/profile");
     assert.notEqual(noToken.status, 200, "No token cannot access /api/user/profile");
 
     // Expired / invalid token must not access protected endpoints
-    const badToken = await httpRequest(reqOpts("GET", "/api/user/profile", "invalid-token-xyz"));
+    const badToken = await requestJson(app, "GET", "/api/user/profile", undefined, {
+      Authorization: "Bearer invalid-token-xyz"
+    });
     assert.notEqual(badToken.status, 200, "Invalid token cannot access /api/user/profile");
 
     // Summarize endpoint requires token
-    const summarizeNoAuth = await httpRequest(reqOpts("POST", "/api/summarize"), {
+    const summarizeNoAuth = await requestJson(app, "POST", "/api/summarize", {
       text: "Test card content"
     });
     assert.notEqual(summarizeNoAuth.status, 200, "Summarize requires authentication");
 
     // Credit balance isolation: User A and B have independent balances
-    const creditsA = await httpRequest(reqOpts("GET", "/api/user/credits", tokenA));
-    const creditsB = await httpRequest(reqOpts("GET", "/api/user/credits", tokenB));
+    const creditsA = await requestJson(app, "GET", "/api/user/credits", undefined, {
+      Authorization: `Bearer ${tokenA}`
+    });
+    const creditsB = await requestJson(app, "GET", "/api/user/credits", undefined, {
+      Authorization: `Bearer ${tokenB}`
+    });
     assert.equal(creditsA.status, 200, "User A credits readable");
     assert.equal(creditsB.status, 200, "User B credits readable");
     assert.ok(typeof creditsA.body.credits === "number", "User A credits is a number");
     assert.ok(typeof creditsB.body.credits === "number", "User B credits is a number");
 
+    // The user activity feed must not expose global/system events or the other user's events.
+    await app.store.add("events", {
+      id: "system-event-not-for-users",
+      type: "system.service_restart_blocked",
+      payload: { service: "api" }
+    });
+    const activityA = await requestJson(app, "GET", "/api/user/activity", undefined, {
+      Authorization: `Bearer ${tokenA}`
+    });
+    assert.equal(activityA.status, 200, "User A activity readable");
+    assert.ok(activityA.body.activities.every((event) => event.payload.userId === regA.body.user.id), "User A activity excludes system and User B events");
+    assert.ok(!JSON.stringify(activityA.body.activities).includes("user-b@test.example"), "User A activity does not leak User B registration data");
+
   } finally {
-    await new Promise((resolve) => server.close(resolve));
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

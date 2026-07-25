@@ -5,6 +5,9 @@ const { createBackendStore, createId, normalizeBackendStoreOptions } = require("
 
 const BODY_LIMIT = 1024 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const BATCH_CARD_STATUSES = new Set(["pending", "opened", "running", "analyzed", "copied", "skipped", "blocked", "failed"]);
+const BATCH_EDITABLE_JOB_STATUSES = new Set(["queued", "running"]);
+const BATCH_FINAL_CARD_STATUSES = new Set(["copied", "skipped", "blocked", "failed"]);
 
 function nowIso() {
   return new Date().toISOString();
@@ -36,7 +39,9 @@ function bearerToken(req) {
 }
 
 function tokenHash(token) {
-  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+  return crypto.createHmac("sha256", String(config.JWT_SECRET || ""))
+    .update(String(token || ""))
+    .digest("hex");
 }
 
 function scryptRecord(password, salt) {
@@ -58,7 +63,11 @@ function readBody(req) {
     req.on("data", (chunk) => {
       chunks.push(chunk);
       size += chunk.length;
-      if (size > BODY_LIMIT) reject(new Error("Request body too large"));
+      if (size > BODY_LIMIT) {
+        const error = new Error("Request body too large");
+        error.statusCode = 413;
+        reject(error);
+      }
     });
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
@@ -69,7 +78,9 @@ function readBody(req) {
       try {
         resolve(JSON.parse(raw));
       } catch (_error) {
-        reject(new Error("Invalid JSON body"));
+        const error = new Error("Invalid JSON body");
+        error.statusCode = 400;
+        reject(error);
       }
     });
     req.on("error", reject);
@@ -90,14 +101,15 @@ function providerMode(payload) {
 
 function providerGuardrails(payload) {
   const mode = providerMode(payload);
-  const directConfigured = Boolean(config.OPENAI_API_KEY || config.ANTHROPIC_API_KEY || config.GOOGLE_API_KEY);
-  const proxyConfigured = Boolean(config.PROXY_ENDPOINT);
   return {
     mode,
-    directConfigured,
-    proxyConfigured,
+    directConfigured: false,
+    proxyConfigured: false,
     localFallback: mode === "local",
-    valid: !((mode === "proxy" && !proxyConfigured) || (mode === "direct-provider" && !directConfigured))
+    valid: mode === "local",
+    limitation: mode === "local"
+      ? "Deterministic local summary only; review the source before acting."
+      : "This backend does not execute provider or proxy requests. Use the reviewed Power-Up flow instead."
   };
 }
 
@@ -133,6 +145,14 @@ function paginate(items, limit, offset) {
 function requireFields(body, fields) {
   const missing = fields.filter((field) => !String(body[field] || "").trim());
   return missing.length ? `Missing required fields: ${missing.join(", ")}` : "";
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 }
 
 function idempotencyKey(req) {
@@ -202,14 +222,8 @@ function validateSummarizePayload(payload) {
   if (!text.trim()) return "Text is required";
   if (text.trim().length < 50) return "Text too short";
   const mode = providerMode(payload);
-  if (mode === "proxy" && payload.provider && payload.provider.apiKey) {
-    return "Proxy mode cannot be combined with browser-held provider credentials";
-  }
-  if (mode === "proxy" && !config.PROXY_ENDPOINT) {
-    return "Proxy mode was requested but PROXY_ENDPOINT is not configured on the backend";
-  }
-  if (mode === "direct-provider" && !(config.OPENAI_API_KEY || config.ANTHROPIC_API_KEY || config.GOOGLE_API_KEY)) {
-    return "Direct-provider mode was requested but no backend provider key is configured";
+  if (mode !== "local") {
+    return "This backend only supports deterministic local summaries; it does not execute provider or proxy requests.";
   }
   return "";
 }
@@ -228,12 +242,18 @@ async function createSession(store, userId, role) {
   };
 }
 
+function isActiveSession(session, now = Date.now()) {
+  if (!session || session.revokedAt) return false;
+  const expiresAt = Date.parse(String(session.expiresAt || ""));
+  return Number.isFinite(expiresAt) && expiresAt > now;
+}
+
 async function getSessionContext(store, req) {
   const token = bearerToken(req);
   if (!token) return null;
   const session = await store.findSessionByTokenHash(tokenHash(token));
   if (!session) return null;
-  if (session.expiresAt && new Date(session.expiresAt).getTime() < Date.now()) {
+  if (!isActiveSession(session)) {
     await store.revokeSession(tokenHash(token));
     return null;
   }
@@ -307,7 +327,9 @@ function buildBatchJob(body) {
 function computeBatchJobStatus(job) {
   const cards = Array.isArray(job.cards) ? job.cards : [];
   if (!cards.length) return "queued";
-  if (cards.every((item) => item.status === "completed" || item.status === "copied" || item.status === "skipped")) {
+  const terminalStates = ["analyzed", "completed", "copied", "skipped"];
+  if (cards.every((item) => terminalStates.includes(item.status))) {
+    if (cards.some((item) => item.status === "analyzed")) return "review-required";
     return "completed";
   }
   if (cards.some((item) => item.status === "blocked" || item.status === "failed")) {
@@ -319,6 +341,36 @@ function computeBatchJobStatus(job) {
   return job.status || "queued";
 }
 
+function batchValidationError(message) {
+  const error = new Error(message);
+  error.statusCode = 422;
+  return error;
+}
+
+function validateBatchCardUpdate(card, body) {
+  if (body.status === undefined) return;
+  const nextStatus = String(body.status || "").trim();
+  if (!BATCH_CARD_STATUSES.has(nextStatus)) {
+    throw batchValidationError("Unsupported batch card status. Record only a recognized reviewed-workflow state.");
+  }
+  const currentStatus = String(card.status || "pending");
+  if (BATCH_FINAL_CARD_STATUSES.has(currentStatus) && nextStatus !== currentStatus) {
+    throw batchValidationError("A terminal batch card state cannot be changed by a later sync update.");
+  }
+  if (currentStatus === "analyzed" && nextStatus !== "analyzed" && nextStatus !== "copied") {
+    throw batchValidationError("An analyzed batch card may only remain analyzed or record a later copy action.");
+  }
+  if (nextStatus === "analyzed" && (!body.result || typeof body.result !== "object" || Array.isArray(body.result))) {
+    throw batchValidationError("An analyzed batch card requires an observed result object.");
+  }
+  if (body.result !== undefined && nextStatus !== "analyzed" && currentStatus !== "analyzed") {
+    throw batchValidationError("A batch result can be recorded only with an analyzed card state.");
+  }
+  if ((nextStatus === "blocked" || nextStatus === "failed") && !String(body.error || "").trim()) {
+    throw batchValidationError("A blocked or failed batch card requires an observed error reason.");
+  }
+}
+
 async function updateBatchJob(store, jobId, userId, updater) {
   const jobs = await store.list("batchJobs");
   const job = jobs.find((item) => item.id === jobId && (!userId || item.userId === userId));
@@ -328,26 +380,6 @@ async function updateBatchJob(store, jobId, userId, updater) {
   job.status = computeBatchJobStatus(job);
   await store.replace("batchJobs", jobs);
   return clone(job);
-}
-
-async function executeBatchJob(store, jobId) {
-  return updateBatchJob(store, jobId, null, (job) => {
-    if (!job.aiHandoffApproved) {
-      job.status = "blocked";
-      return;
-    }
-    job.status = "running";
-    for (const card of job.cards) {
-      if (card.status === "completed") continue;
-      card.status = "running";
-      card.attempts += 1;
-      card.result = {
-        summary: `Reviewed ${card.name}`,
-        confidence: 0.65
-      };
-      card.status = "completed";
-    }
-  });
 }
 
 async function route(req, res, store) {
@@ -362,7 +394,7 @@ async function route(req, res, store) {
       timestamp: nowIso(),
       storage: {
         users: snapshot.users.length,
-        sessions: snapshot.sessions.filter((item) => !item.revokedAt).length,
+        sessions: snapshot.sessions.filter((item) => isActiveSession(item)).length,
         batchJobs: snapshot.batchJobs.length
       },
       readiness: config.backendReadiness(),
@@ -393,7 +425,16 @@ async function route(req, res, store) {
       json(res, 400, { success: false, error: missing });
       return;
     }
-    const email = String(body.email).trim().toLowerCase();
+    const email = normalizeEmail(body.email);
+    if (!isValidEmail(email)) {
+      json(res, 400, { success: false, error: "A valid email address is required" });
+      return;
+    }
+    const limited = await checkRateLimit(store, "auth.register", email, 5, 60 * 60_000);
+    if (!limited.ok) {
+      json(res, 429, { success: false, error: "Too many registration attempts", retryAfterSeconds: limited.retryAfterSeconds });
+      return;
+    }
     if (await store.findUserByEmail(email)) {
       json(res, 409, { success: false, error: "Email already exists" });
       return;
@@ -413,15 +454,15 @@ async function route(req, res, store) {
 
   if (req.method === "POST" && pathname === "/api/auth/login") {
     const body = await readBody(req);
-    const email = String(body.email || "").trim().toLowerCase();
-    const user = await store.findUserByEmail(email);
-    if (!user || !verifyPassword(body.password, { hash: user.passwordHash, salt: user.passwordSalt }) || user.suspended) {
-      json(res, 401, { success: false, error: "Invalid credentials" });
-      return;
-    }
+    const email = normalizeEmail(body.email);
     const limited = await checkRateLimit(store, "auth.login", email, 10, 60_000);
     if (!limited.ok) {
       json(res, 429, { success: false, error: "Too many login attempts", retryAfterSeconds: limited.retryAfterSeconds });
+      return;
+    }
+    const user = await store.findUserByEmail(email);
+    if (!user || !verifyPassword(body.password, { hash: user.passwordHash, salt: user.passwordSalt }) || user.suspended) {
+      json(res, 401, { success: false, error: "Invalid credentials" });
       return;
     }
     const session = await createSession(store, user.id, "user");
@@ -440,8 +481,13 @@ async function route(req, res, store) {
 
   if (req.method === "POST" && pathname === "/api/admin/auth/login") {
     const body = await readBody(req);
-    const email = String(body.email || "").trim().toLowerCase();
+    const email = normalizeEmail(body.email);
     const password = String(body.password || "");
+    const limited = await checkRateLimit(store, "admin.login", email, 5, 15 * 60_000);
+    if (!limited.ok) {
+      json(res, 429, { success: false, error: "Too many admin login attempts", retryAfterSeconds: limited.retryAfterSeconds });
+      return;
+    }
     if (email !== String(config.ADMIN_EMAIL).trim().toLowerCase() || password !== config.ADMIN_PASSWORD) {
       json(res, 401, { success: false, error: "Invalid admin credentials" });
       return;
@@ -492,7 +538,9 @@ async function route(req, res, store) {
   if (req.method === "GET" && pathname === "/api/user/activity") {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
-    const events = (await store.list("events")).filter((item) => !item.payload.userId || item.payload.userId === context.user.id).slice(0, 20);
+    const events = (await store.list("events"))
+      .filter((item) => item.payload && item.payload.userId === context.user.id)
+      .slice(0, 20);
     json(res, 200, { success: true, activities: events });
     return;
   }
@@ -518,15 +566,22 @@ async function route(req, res, store) {
         return { status: 402, payload: { success: false, error: "Insufficient credits" } };
       }
       const updatedUser = await store.updateUser(current.id, { credits: Number(current.credits || 0) - 5 });
+      const factualExcerpt = summarizeText(body.text);
       const summary = await store.add("summaries", {
         id: createId("summary"),
         userId: current.id,
-        summary: summarizeText(body.text),
+        summary: factualExcerpt,
         method: body.method || "hybrid",
         providerMode: providerMode(body),
         confidence: 0.65,
         heuristicConfidence: 0.65,
         measuredEvaluation: null,
+        evidence: {
+          facts: [{ claim: factualExcerpt, source: "submitted text" }],
+          inferences: [],
+          uncertainty: ["This deterministic excerpt does not validate completeness, context, or correctness."],
+          unsupportedClaims: []
+        },
         guardrails: providerGuardrails(body),
         creditsUsed: 5,
         createdAt: nowIso()
@@ -553,35 +608,23 @@ async function route(req, res, store) {
   if (req.method === "POST" && pathname === "/api/credits/purchase") {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
-    const body = await readBody(req);
-    const packages = { basic: 25, pro: 100, team: 250 };
-    const credits = packages[body.package] || 25;
-    const response = await withIdempotency(req, store, `purchase:${context.user.id}`, async () => {
-      const updatedUser = await store.updateUser(context.user.id, { credits: Number(context.user.credits || 0) + credits });
-      const transaction = await store.add("transactions", {
-        id: createId("txn"),
-        userId: context.user.id,
-        type: "credit_purchase",
-        credits,
-        status: "completed",
-        package: body.package || "basic",
-        paymentMethodId: body.paymentMethodId || "",
-        createdAt: nowIso()
-      }, { limit: 1000 });
-      await appendEvent(store, "credits.purchased", { userId: context.user.id, transactionId: transaction.id, credits });
-      return { status: 200, payload: { success: true, transaction, user: cleanUser(updatedUser) } };
+    await appendEvent(store, "credits.purchase_blocked", {
+      userId: context.user.id,
+      reason: "No verified payment processor is configured."
     });
-    json(res, response.status, response.payload);
+    json(res, 503, {
+      success: false,
+      error: "Credit purchases are unavailable because this backend has no verified payment processor integration.",
+      nextAction: "Configure and verify a payment provider before enabling purchases."
+    });
     return;
   }
 
   if (req.method === "POST" && pathname === "/api/webhooks/stripe") {
-    if (!req.headers["stripe-signature"]) {
-      json(res, 400, { success: false, error: "Missing stripe-signature header" });
-      return;
-    }
-    await appendEvent(store, "stripe.webhook.received", { signed: true });
-    json(res, 202, { success: true, accepted: true });
+    json(res, 503, {
+      success: false,
+      error: "Stripe webhooks are disabled because signature verification and payment reconciliation are not implemented."
+    });
     return;
   }
 
@@ -640,13 +683,22 @@ async function route(req, res, store) {
   if (req.method === "POST" && batchJobMatch) {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
-    const job = await executeBatchJob(store, batchJobMatch[1]);
+    const jobs = await store.list("batchJobs");
+    const job = jobs.find((item) => item.id === batchJobMatch[1] && item.userId === context.user.id);
     if (!job) {
       json(res, 404, { success: false, error: "Batch job not found" });
       return;
     }
-    await appendEvent(store, "batch.completed", { userId: context.user.id, jobId: job.id, status: job.status });
-    json(res, 200, { success: true, job });
+    await appendEvent(store, "batch.run_blocked", {
+      userId: context.user.id,
+      jobId: job.id,
+      reason: "The backend must not fabricate card analysis or completion."
+    });
+    json(res, 409, {
+      success: false,
+      error: "Server-side batch execution is not available. Use the reviewed Power-Up workflow to analyze each card and sync its real result.",
+      job
+    });
     return;
   }
 
@@ -656,7 +708,13 @@ async function route(req, res, store) {
     if (!context) return;
     const body = await readBody(req);
     const job = await updateBatchJob(store, batchJobStatusMatch[1], context.user.id, (item) => {
-      item.status = String(body.status || item.status || "running");
+      if (body.status !== undefined) {
+        const requestedStatus = String(body.status || "").trim();
+        if (!BATCH_EDITABLE_JOB_STATUSES.has(requestedStatus)) {
+          throw batchValidationError("Batch terminal status is derived from recorded card outcomes and cannot be set directly.");
+        }
+        item.status = requestedStatus;
+      }
       if (body.summary) item.summary = String(body.summary);
       if (body.finishedAt) item.finishedAt = String(body.finishedAt);
     });
@@ -676,6 +734,7 @@ async function route(req, res, store) {
     const job = await updateBatchJob(store, batchJobCardMatch[1], context.user.id, (item) => {
       const card = (item.cards || []).find((entry) => entry.id === batchJobCardMatch[2]);
       if (!card) return;
+      validateBatchCardUpdate(card, body);
       if (body.status !== undefined) card.status = String(body.status);
       if (body.error !== undefined) card.error = body.error ? String(body.error) : null;
       if (body.result !== undefined) card.result = clone(body.result);
@@ -744,7 +803,7 @@ async function route(req, res, store) {
     json(res, 200, {
       success: true,
       realtime: {
-        activeTokens: sessions.filter((item) => !item.revokedAt).length,
+        activeTokens: sessions.filter((item) => isActiveSession(item)).length,
         recentEvents: events.slice(0, 10),
         alertsOpen: alerts.filter((item) => !item.acknowledged).length
       }
@@ -794,11 +853,29 @@ async function route(req, res, store) {
     const context = await requireSession(store, req, res, "admin");
     if (!context) return;
     const body = await readBody(req);
-    const user = await store.updateUser(userDetailMatch[1], {
-      email: body.email !== undefined ? String(body.email).trim().toLowerCase() : undefined,
-      name: body.name !== undefined ? String(body.name) : undefined,
-      role: body.role !== undefined ? String(body.role) : undefined
-    });
+    const updates = {};
+    if (body.email !== undefined) {
+      const email = normalizeEmail(body.email);
+      if (!isValidEmail(email)) {
+        json(res, 400, { success: false, error: "A valid email address is required" });
+        return;
+      }
+      const existing = await store.findUserByEmail(email);
+      if (existing && existing.id !== userDetailMatch[1]) {
+        json(res, 409, { success: false, error: "Email already exists" });
+        return;
+      }
+      updates.email = email;
+    }
+    if (body.name !== undefined) updates.name = String(body.name);
+    if (body.role !== undefined) {
+      json(res, 422, {
+        success: false,
+        error: "User roles are not mutable through this endpoint; admin authority is granted only by the separate admin session flow."
+      });
+      return;
+    }
+    const user = await store.updateUser(userDetailMatch[1], updates);
     if (!user) {
       json(res, 404, { success: false, error: "User not found" });
       return;
@@ -965,29 +1042,21 @@ async function route(req, res, store) {
   if (req.method === "POST" && transactionRefundMatch) {
     const context = await requireSession(store, req, res, "admin");
     if (!context) return;
-    const body = await readBody(req);
     const transactions = await store.list("transactions");
     const original = transactions.find((item) => item.id === transactionRefundMatch[1]);
     if (!original) {
       json(res, 404, { success: false, error: "Transaction not found" });
       return;
     }
-    const refund = await store.add("transactions", {
-      id: createId("txn"),
-      userId: original.userId,
-      type: "refund",
-      credits: Math.abs(Number(original.credits || 0)),
-      status: "completed",
-      reason: String(body.reason || "manual refund"),
-      relatedTransactionId: original.id,
-      createdAt: nowIso()
-    }, { limit: 1000 });
-    const user = await store.findUserById(original.userId);
-    if (user) {
-      await store.updateUser(user.id, { credits: Number(user.credits || 0) + Math.abs(Number(original.credits || 0)) });
-    }
-    await appendEvent(store, "transaction.refunded", { transactionId: original.id, refundId: refund.id });
-    json(res, 200, { success: true, transaction: refund });
+    await appendEvent(store, "transaction.refund_blocked", {
+      transactionId: original.id,
+      reason: "No verified payment processor reconciliation is implemented."
+    });
+    json(res, 503, {
+      success: false,
+      error: "Refunds are unavailable because this backend cannot verify or execute a payment-provider refund.",
+      nextAction: "Process the refund in the payment provider and record any corresponding credit adjustment separately."
+    });
     return;
   }
 
@@ -1097,14 +1166,13 @@ async function route(req, res, store) {
   if (req.method === "POST" && pathname === "/api/admin/backup/create") {
     const context = await requireSession(store, req, res, "admin");
     if (!context) return;
-    const body = await readBody(req);
-    const backup = await store.add("backups", {
-      id: createId("backup"),
-      type: body.type || "full",
-      createdAt: nowIso(),
-      restoredAt: null
-    }, { limit: 100 });
-    json(res, 200, { success: true, backup });
+    await appendEvent(store, "backup.create_blocked", {
+      reason: "No restorable snapshot mechanism is implemented."
+    });
+    json(res, 503, {
+      success: false,
+      error: "Backups are unavailable because this backend cannot create and verify a restorable snapshot."
+    });
     return;
   }
 
@@ -1119,16 +1187,14 @@ async function route(req, res, store) {
   if (req.method === "POST" && backupRestoreMatch) {
     const context = await requireSession(store, req, res, "admin");
     if (!context) return;
-    const backups = await store.list("backups");
-    const backup = backups.find((item) => item.id === backupRestoreMatch[1]);
-    if (!backup) {
-      json(res, 404, { success: false, error: "Backup not found" });
-      return;
-    }
-    backup.restoredAt = nowIso();
-    await store.replace("backups", backups);
-    await appendEvent(store, "backup.restored", { backupId: backup.id });
-    json(res, 200, { success: true, backup });
+    await appendEvent(store, "backup.restore_blocked", {
+      backupId: backupRestoreMatch[1],
+      reason: "No restorable snapshot mechanism is implemented."
+    });
+    json(res, 503, {
+      success: false,
+      error: "Backup restore is unavailable because this backend cannot validate or restore a snapshot."
+    });
     return;
   }
 
@@ -1157,8 +1223,14 @@ async function route(req, res, store) {
   if (req.method === "POST" && restartServiceMatch) {
     const context = await requireSession(store, req, res, "admin");
     if (!context) return;
-    await appendEvent(store, "system.service_restart_requested", { service: restartServiceMatch[1] });
-    json(res, 200, { success: true, service: restartServiceMatch[1], status: "restart-requested" });
+    await appendEvent(store, "system.service_restart_blocked", {
+      service: restartServiceMatch[1],
+      reason: "No service-control integration is configured."
+    });
+    json(res, 503, {
+      success: false,
+      error: "Service restart is unavailable because this backend has no verified service-control integration."
+    });
     return;
   }
 
@@ -1198,11 +1270,9 @@ async function route(req, res, store) {
 
 async function createBackendApp(options = {}) {
   const normalizedOptions = normalizeBackendStoreOptions(options);
-  const seedPasswordRecord = scryptRecord("correct-password", "seed-password-salt");
   const store = normalizedOptions.store || await createBackendStore({
     storeType: normalizedOptions.storeType,
-    filePath: normalizedOptions.filePath,
-    seedPasswordRecord
+    filePath: normalizedOptions.filePath
   });
 
   const readiness = config.backendReadiness();
@@ -1221,11 +1291,18 @@ async function createBackendApp(options = {}) {
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Frame-Options", "DENY");
       res.setHeader("Referrer-Policy", "no-referrer");
-      const origin = req.headers.origin || "*";
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
-      res.setHeader("Access-Control-Max-Age", "86400");
+      const origin = String(req.headers.origin || "").trim();
+      if (origin && !config.isAllowedBackendOrigin(origin)) {
+        json(res, 403, { success: false, error: "Origin is not allowed to access this backend." });
+        return;
+      }
+      if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
+        res.setHeader("Access-Control-Max-Age", "86400");
+        res.setHeader("Vary", "Origin");
+      }
       if (req.method === "OPTIONS") {
         res.writeHead(204);
         res.end();
@@ -1234,8 +1311,12 @@ async function createBackendApp(options = {}) {
       try {
         await route(req, res, store);
       } catch (error) {
-        await appendAlert(store, "high", error.message, "runtime");
-        json(res, 500, { success: false, error: error.message });
+        const status = Number(error && error.statusCode);
+        const clientError = status >= 400 && status < 500;
+        if (!clientError) {
+          await appendAlert(store, "high", error.message, "runtime");
+        }
+        json(res, clientError ? status : 500, { success: false, error: error.message });
       }
     }
   };

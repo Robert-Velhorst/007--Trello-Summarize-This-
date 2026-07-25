@@ -754,8 +754,9 @@
     });
   }
 
-  function createEvidenceClaims(summary, evidence) {
+  function createEvidenceClaims(summary, evidence, options) {
     var claims = [];
+    var unverifiedAi = Boolean(options && options.unverifiedAi);
     var sections = [
       { key: "about", title: "Card overview", types: ["title", "description", "label"] },
       { key: "history", title: "History", types: ["comment", "activity", "checklist", "attachment"] },
@@ -765,7 +766,7 @@
     sections.forEach(function (section) {
       var text = cleanText(summary && summary[section.key]);
       if (!text) return;
-      var support = findEvidenceIds(evidence, section.types);
+      var support = unverifiedAi ? [] : findEvidenceIds(evidence, section.types);
       claims.push({
         id: "claim-" + section.key,
         section: section.key,
@@ -782,8 +783,8 @@
         id: "claim-ai-" + (index + 1),
         section: "ai-evidence",
         claim: claim.length > 260 ? claim.slice(0, 257).trim() + "..." : claim,
-        support: findEvidenceIds(evidence, ["title", "description", "comment", "activity", "checklist", "attachment", "due", "label", "member", "custom-field"]),
-        confidence: cleanText(item && item.confidence) || "uncertain",
+        support: [],
+        confidence: "uncertain",
         source: cleanText(item && item.source)
       });
     });
@@ -1121,6 +1122,19 @@
       findings.push(finding("ai-validation-" + (index + 1), includesAny(text, ["unsupported", "conflict", "sensitive", "legal", "financial"]) ? "high" : "medium", text, findEvidenceIds(evidence, ["title", "description", "comment", "checklist", "attachment"])));
     });
 
+    if (options && options.unverifiedAi) {
+      findings.push(finding("ai-output-unverified", "high", "AI-generated wording and claimed evidence are unverified. Confirm against the card sources before acting.", []));
+      toArray(summary && summary.inferences).forEach(function (text, index) {
+        findings.push(finding("ai-inference-" + (index + 1), "medium", "Inference (not a verified fact): " + text, []));
+      });
+      toArray(summary && summary.uncertainty).forEach(function (text, index) {
+        findings.push(finding("ai-uncertainty-" + (index + 1), "medium", "Uncertainty: " + text, []));
+      });
+      toArray(summary && summary.unsupportedClaims).forEach(function (text, index) {
+        findings.push(finding("ai-unsupported-" + (index + 1), "high", "Unsupported claim: " + text, []));
+      });
+    }
+
     if (!card.description) {
       findings.push(finding("missing-description", "medium", "Card has no description; analysis is based on weaker context.", findEvidenceIds(evidence, ["title"])));
     }
@@ -1390,7 +1404,7 @@
     var nextActions = extractNextActions(input, normalizedSummary, evidence);
     var robertDecisions = extractRobertDecisions(input, normalizedSummary, evidence);
     var vaReadyActions = extractVaReadyActions(input, normalizedSummary, evidence);
-    var evidenceClaims = createEvidenceClaims(normalizedSummary, evidence);
+    var evidenceClaims = createEvidenceClaims(normalizedSummary, evidence, options);
     var operational = {
       blockers: blockers,
       waitingOn: waitingOn,
@@ -1410,7 +1424,10 @@
   function createAnalysisRun(input, analysis, options) {
     var card = normalizeCard(input);
     var summary = (analysis && analysis.summary) || analysis || {};
-    var operational = createOperationalAnalysis(input, summary, options);
+    var operationalOptions = Object.assign({}, options || {}, {
+      unverifiedAi: Boolean(analysis && analysis.source === "ai")
+    });
+    var operational = createOperationalAnalysis(input, summary, operationalOptions);
     var timestamp = nowIso(options);
     var runId = "run-" + shortHash(card.id + timestamp + JSON.stringify(summary));
     var outputMode = normalizeOutputMode(options && options.outputMode);
@@ -1469,6 +1486,10 @@
         vaReadyActions: operational.vaReadyActions,
         insights: toArray(summary.insights),
         recommendations: toArray(summary.recommendations),
+        facts: toArray(summary.facts),
+        inferences: toArray(summary.inferences),
+        uncertainty: toArray(summary.uncertainty),
+        unsupportedClaims: toArray(summary.unsupportedClaims),
         risks: toArray(summary.risks),
         missingInfo: missingInfo,
         unresolvedQuestions: unresolvedQuestions,

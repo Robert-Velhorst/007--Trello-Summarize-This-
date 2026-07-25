@@ -7,8 +7,8 @@ An evidence-backed Trello Power-Up that adds a "Summarize This" button to every 
 ## 🎯 How It Works
 
 1. **Click the Button**: Every Trello card now has a "Summarize This" button
-2. **AI Analyzes**: The Power-Up gathers card data (description, checklists, comments, activity, attachment metadata, and optional bounded text/CSV excerpts) and sends a bounded prompt to your chosen AI provider or proxy
-3. **Get Insights**: Within 10-30 seconds, you receive a comprehensive 4-part summary:
+2. **Analyze**: The Power-Up gathers card data (description, checklists, comments, activity, attachment metadata, and optional bounded text/CSV excerpts) and uses either the local summarizer or an operator-configured AI provider/proxy path
+3. **Review Results**: When analysis completes, review the structured output and its evidence/validation signals:
    - **What This Card Is About**: Overview and objectives
    - **What Has Happened**: Progress and history
    - **Current Status**: Where things stand now
@@ -99,7 +99,7 @@ You need to host these files on an HTTPS server. Choose one of these options:
 
 1. **Open any card** in your Trello board
 2. **Click "Summarize This"** button on the card
-3. **Wait 10-30 seconds** for AI analysis
+3. **Wait for the selected local or provider analysis to complete**; duration depends on the card, configuration, network, and provider
 4. **Review the summary** in the popup
 5. **Copy to clipboard** if needed
 
@@ -107,28 +107,25 @@ You need to host these files on an HTTPS server. Choose one of these options:
 
 ### Analysis Strategies
 
-**Cost-Effective (Recommended)**
-- Uses: GPT-4o-mini, Claude 3.5 Haiku, Gemini 2.0 Flash
-- Cost: ~$0.005-0.015 per analysis
-- Best for: Regular use, budget-conscious teams
+**Cost-Effective**
+- Use a local summary or select a lower-cost model available through your configured provider
+- Verify provider pricing and limits in that provider's account before use
 
-**Best Quality**
-- Uses: GPT-4, Claude 3.5 Sonnet, Gemini 2.0 Pro
-- Cost: ~$0.03-0.10 per analysis
-- Best for: Critical decisions, important projects
+**Higher Detail**
+- Select a suitable configured model and increase review rigor for important decisions
+- Output remains a review aid, not verified fact
 
-**Speed-Optimized**
-- Uses: Fastest models
-- Cost: ~$0.003-0.010 per analysis
-- Best for: Quick overviews, time-sensitive analysis
+**Local-First**
+- Use the built-in deterministic summarizer when no provider call is appropriate
+- Do not infer provider quality, latency, or cost from local output
 
 ### Supported AI Providers
 
-| Provider | Models | Cost Range | Speed |
-|----------|--------|------------|-------|
-| OpenAI | GPT-4, GPT-4o-mini | $0.0001-0.06/1K tokens | Fast |
-| Anthropic | Claude 3.5 Sonnet, Haiku | $0.0008-0.015/1K tokens | Fast |
-| Google AI | Gemini 2.0 Flash, Pro | $0.0001-0.004/1K tokens | Very Fast |
+| Provider | Availability | Operator responsibility |
+|----------|--------------|-------------------------|
+| OpenAI | Supported when configured | Confirm current model access, pricing, and limits with OpenAI |
+| Anthropic | Supported when configured | Confirm current model access, pricing, and limits with Anthropic |
+| Google AI | Supported when configured | Confirm current model access, pricing, and limits with Google |
 
 ## 🔒 Privacy & Security
 
@@ -137,17 +134,9 @@ You need to host these files on an HTTPS server. Choose one of these options:
 - **Attachment Limits**: Binary attachments are represented honestly as metadata-only when text was not extracted
 - **Your Data**: Card data is only sent to configured providers or your configured proxy after the runtime rules allow it
 
-## 💰 Cost Estimates
+## 💰 Cost and Timing
 
-### Per Analysis
-- Typical card: $0.005-0.015
-- Complex card with many comments/checklists: $0.02-0.05
-- Very large card with attachments: $0.05-0.10
-
-### Monthly Estimates
-- **Light use** (10 cards/day): $3-15/month
-- **Medium use** (50 cards/day): $15-75/month
-- **Heavy use** (200 cards/day): $60-300/month
+The repository does not publish verified cost, throughput, or latency estimates. Provider cost and timing depend on the selected model, its current provider pricing, the prompt/card size, attachment policy, and network conditions. Review the provider account and the in-product budget signals before enabling provider calls.
 
 ## 🐛 Troubleshooting
 
@@ -225,11 +214,11 @@ Edit `popup.html`, find `formatCardDataForAI()` function and modify the prompt t
 
 ## 🎓 Best Practices
 
-1. **Start with Cost-Effective**: Use the recommended strategy for most cards
-2. **Reserve Best Quality**: For critical decisions and important projects
-3. **Configure Multiple Providers**: Fallback options if one fails
-4. **Review Regularly**: Check analysis history and costs
-5. **Copy Important Summaries**: Save key insights to card descriptions
+1. **Start local-first**: Use the deterministic fallback where provider analysis is unnecessary
+2. **Review source material**: Treat every confidence value and AI statement as a review signal
+3. **Configure only necessary providers**: Verify each account, model, pricing, and data-handling policy
+4. **Review regularly**: Check private analysis history, budget signals, and feedback
+5. **Copy important summaries deliberately**: Description writeback is not implemented; make any Trello change consciously
 
 ## 🆘 Support
 
@@ -245,6 +234,6 @@ MIT License - feel free to modify and distribute
 
 **Version**: 3.0  
 **Last Updated**: January 2026  
-**Status**: Production Ready
+**Status**: Verified static Power-Up scope; not production-ready
 
 Enjoy AI-powered card insights! 🎉

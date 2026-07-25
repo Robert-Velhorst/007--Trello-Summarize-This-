@@ -1,6 +1,7 @@
 # Final No-Excuses Search
 
-Date: 2026-07-23 (Phase 115)
+Date: 2026-07-25
+Previous: 2026-07-23 (Phase 115)
 
 ## Command Run
 
@@ -23,7 +24,7 @@ The following files contain one or more of the target patterns. Each is assessed
 | `analytics-framework.js` | TODO | Legacy module. Not in shipped flow. |
 | `artillery-processor.js` | token | Load test file. Not in shipped flow. |
 | `attachment-processor.js` | token | Used in error sanitization to detect and strip sensitive URLs. Not a stored token. |
-| `backend-app.js` | password, token, secret | password — stored in memory (documented as not production-safe). token — used correctly as Bearer token auth. secret — JWT_SECRET environment variable reference. |
+| `backend-app.js` | password, token, secret | password — handled via salted hashes for user accounts and env-based admin credentials. token — used correctly as Bearer token auth. secret — JWT_SECRET environment variable reference. |
 | `backend-config.js` | password, secret | JWT_SECRET and ADMIN_PASSWORD are environment variable names. Not hardcoded values. |
 | `backend-doctor.js` | password | Reference to ADMIN_PASSWORD env var. |
 | `batch-processor.js` | placeholder | Legacy batch module. Not in shipped flow. |
@@ -47,10 +48,15 @@ The following files contain one or more of the target patterns. Each is assessed
 | `trello-admin-config.js` | password, token, secret | Legacy admin config. Not in shipped flow as standalone. |
 | `trello-integration.js` | token, secret | Trello REST API auth token (correct use). Secret reference is in error sanitization. |
 | `useWebSocket.js` | token | Legacy WebSocket client. Not in shipped flow. |
+| `FINAL_DEPLOYMENT_GUIDE.md` | production-ready wording | Historical milestone document. Now explicitly labeled as historical and not the source of truth. |
+| `DEPLOYMENT_GUIDE.md` | deployment-to-production wording | Historical deployment guide. Now explicitly labeled as historical and not the source of truth. |
+| `todo-updated.md` | production-ready goal wording | Historical planning document. Now explicitly labeled as historical and not the source of truth. |
+| `README.md` | production-ready status and customer-style quotes | Updated to describe the verified local scope, link to the completion evidence, and label example uses rather than unverified testimonials. |
+| `POWERUP_README.md` | production-ready footer | Updated to state the verified static Power-Up scope rather than production readiness. |
 
 ## Verdict
 
-**No unsafe credential storage in shipped flow files.**
+**No unsafe credential storage in shipped flow files, and the active top-level README/Power-Up documentation now states the verified local scope rather than production readiness.**
 
 All token/secret/password references in the active surface (`connector.js`, `popup.html`, `settings-powerup.html`, `ai-providers.js`, `trello-integration.js`, `summarizer-core.js`, `attachment-processor.js`) are:
 - Error sanitization patterns (stripping, not storing)
@@ -66,3 +72,4 @@ Legacy/inactive files with patterns are documented in `docs/TECHNICAL_AUDIT.md` 
 - Local rule-based analysis is explicitly labeled as "Local rules" in all output metadata.
 - Provider fallback is documented and labeled in the popup UI.
 - Confidence is labeled as a review signal, not a measured accuracy claim.
+- Historical top-level milestone docs that could be mistaken for current release status are explicitly labeled to defer to `docs/`.
