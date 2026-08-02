@@ -54,11 +54,20 @@ function send(res, status, headers, body) {
   res.end(body);
 }
 
+// Base security headers applied to every response.
+// NOTE: X-Frame-Options is intentionally NOT included here. This server
+// serves connector.html, which Trello must be able to load inside its own
+// cross-origin iframe. A blanket X-Frame-Options: SAMEORIGIN would block
+// that entirely. Instead, HTML responses get a scoped Content-Security-Policy
+// (see FRAME_ANCESTORS_CSP below) that allows framing only by Trello's
+// origins, which is both more precise and still blocks arbitrary sites from
+// framing this server.
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "no-referrer"
 };
+
+const FRAME_ANCESTORS_CSP = "frame-ancestors https://trello.com https://*.trello.com";
 
 const server = http.createServer((req, res) => {
   // CORS headers for local development
@@ -88,11 +97,18 @@ const server = http.createServer((req, res) => {
     const extension = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[extension] || "application/octet-stream";
 
-    res.writeHead(200, {
+    const headers = {
       "Content-Type": contentType,
       "Cache-Control": "no-store"
-    });
+    };
 
+    // Only HTML documents need to be frameable (connector.html is loaded by
+    // Trello inside an iframe). Other asset types don't need this header.
+    if (extension === ".html") {
+      headers["Content-Security-Policy"] = FRAME_ANCESTORS_CSP;
+    }
+
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   });
 });

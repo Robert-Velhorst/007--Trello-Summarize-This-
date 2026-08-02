@@ -199,6 +199,11 @@ async function checkRateLimit(store, scope, key, max, windowMs) {
   return { ok: true, retryAfterSeconds: 0 };
 }
 
+function clientAddress(req) {
+  const address = req && req.socket && req.socket.remoteAddress;
+  return String(address || "unknown-client").trim().slice(0, 128) || "unknown-client";
+}
+
 async function withIdempotency(req, store, scope, handler) {
   const key = idempotencyKey(req);
   if (!key) return handler();
@@ -430,6 +435,11 @@ async function route(req, res, store) {
       json(res, 400, { success: false, error: "A valid email address is required" });
       return;
     }
+    const ipLimited = await checkRateLimit(store, "auth.register.ip", clientAddress(req), 20, 60 * 60_000);
+    if (!ipLimited.ok) {
+      json(res, 429, { success: false, error: "Too many registration attempts from this client", retryAfterSeconds: ipLimited.retryAfterSeconds });
+      return;
+    }
     const limited = await checkRateLimit(store, "auth.register", email, 5, 60 * 60_000);
     if (!limited.ok) {
       json(res, 429, { success: false, error: "Too many registration attempts", retryAfterSeconds: limited.retryAfterSeconds });
@@ -455,6 +465,11 @@ async function route(req, res, store) {
   if (req.method === "POST" && pathname === "/api/auth/login") {
     const body = await readBody(req);
     const email = normalizeEmail(body.email);
+    const ipLimited = await checkRateLimit(store, "auth.login.ip", clientAddress(req), 30, 60_000);
+    if (!ipLimited.ok) {
+      json(res, 429, { success: false, error: "Too many login attempts from this client", retryAfterSeconds: ipLimited.retryAfterSeconds });
+      return;
+    }
     const limited = await checkRateLimit(store, "auth.login", email, 10, 60_000);
     if (!limited.ok) {
       json(res, 429, { success: false, error: "Too many login attempts", retryAfterSeconds: limited.retryAfterSeconds });
@@ -483,6 +498,11 @@ async function route(req, res, store) {
     const body = await readBody(req);
     const email = normalizeEmail(body.email);
     const password = String(body.password || "");
+    const ipLimited = await checkRateLimit(store, "admin.login.ip", clientAddress(req), 10, 15 * 60_000);
+    if (!ipLimited.ok) {
+      json(res, 429, { success: false, error: "Too many admin login attempts from this client", retryAfterSeconds: ipLimited.retryAfterSeconds });
+      return;
+    }
     const limited = await checkRateLimit(store, "admin.login", email, 5, 15 * 60_000);
     if (!limited.ok) {
       json(res, 429, { success: false, error: "Too many admin login attempts", retryAfterSeconds: limited.retryAfterSeconds });
@@ -1316,7 +1336,10 @@ async function createBackendApp(options = {}) {
         if (!clientError) {
           await appendAlert(store, "high", error.message, "runtime");
         }
-        json(res, clientError ? status : 500, { success: false, error: error.message });
+        json(res, clientError ? status : 500, {
+          success: false,
+          error: clientError ? error.message : "Internal server error"
+        });
       }
     }
   };

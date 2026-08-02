@@ -46,7 +46,7 @@ assert.match(technicalAuditText, /not part of the current shipped Power-Up claim
 
 const completionMatrixText = fs.readFileSync(path.join(__dirname, "docs/GOAL_COMPLETION_MATRIX.md"), "utf8");
 assert.match(completionMatrixText, /\| PDF\/Word\/Excel\/image OCR extraction \| Partial \|/);
-assert.match(completionMatrixText, /\| Trello description writeback \| Missing \|/);
+assert.match(completionMatrixText, /\| Trello description writeback \| Implemented \(local code; live verification pending\) \|/);
 
 const trelloConfigText = fs.readFileSync(path.join(__dirname, "trello-config.js"), "utf8");
 assert.match(trelloConfigText, /SummarizeThisTrelloConfig/);
@@ -254,12 +254,24 @@ assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "pend
 assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "posted"\)/);
 assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "ambiguous"\)/);
 assert.match(popupText, /Check the Trello card manually before posting again/);
+assert.match(popupText, /createTrelloDescriptionDraft/);
+assert.match(popupText, /summarizeThisTrelloDescriptionAttempts/);
+assert.match(popupText, /Checking the current Trello description before updating/);
+assert.match(popupText, /fields=desc/);
+assert.match(popupText, /method: "PUT"/);
+assert.match(popupText, /The Trello description changed since this analysis/);
+assert.match(popupText, /Could not confirm the Trello description outcome/);
 assert.match(popupText, /built-in summarizer/);
 assert.match(popupText, /metadata-only until approval/);
 assert.match(popupText, /Trello app key is not configured for comment lookup/);
 assert.match(popupText, /function maxOutputTokensFor/);
 assert.match(popupText, /maxOutputTokens: maxOutputTokensFor\(settings\)/);
 assert.match(popupText, /max_tokens: maxOutputTokens/);
+assert.match(popupText, /timingTracker: timingTracker/);
+assert.match(popupText, /recordStage\("local-summary", "Local summary", localSummaryStartedAt, nowMs\(\)\)/);
+assert.match(popupText, /recordStage\("ai-provider", "AI provider", providerStartedAt, nowMs\(\)\)/);
+assert.doesNotMatch(popupText, /timingTracker\.mark\("local-summary", "Local summary"\)/);
+assert.doesNotMatch(popupText, /timingTracker\.mark\("ai-provider", "AI provider"\)/);
 assert.match(popupText, /buildRuleBasedAnalysis\(cardData,\s*\{\s*outputLanguage: settings\.outputLanguage\s*\}\)/);
 assert.match(popupText, /id="updatePanel"/);
 assert.match(popupText, /id="checkUpdatesButton"/);
@@ -1548,6 +1560,14 @@ assert.ok(trelloCommentDraft.includes("Source coverage:"));
 assert.ok(trelloCommentDraft.includes("Review note:"));
 assert.ok(trelloCommentDraft.length <= 4000);
 
+const trelloDescriptionDraft = CardIntelligenceLedger.createTrelloDescriptionDraft(run);
+assert.ok(trelloDescriptionDraft.includes("## Operational summary"));
+assert.ok(trelloDescriptionDraft.includes("### Current status"));
+assert.ok(trelloDescriptionDraft.includes("### Next actions"));
+assert.ok(trelloDescriptionDraft.includes("### Review note"));
+assert.match(trelloDescriptionDraft, /not verified fact/i);
+assert.ok(trelloDescriptionDraft.length <= 6028);
+
 const adminConfig = TrelloAdminConfig.createAdminConfig({
   name: "Summarize This",
   details: "Evidence-backed Trello card intelligence.",
@@ -2121,8 +2141,10 @@ async function runAsyncTests() {
     assert.equal(proxyBody.summary.about, "Proxy generated summary.");
     assert.equal(proxyBody.metadata.provider, "OpenAI via proxy");
     assert.equal(proxyBody.metadata.tokens, 150);
+    assert.equal(proxyBody.metadata.cost, null);
+    assert.equal(proxyBody.metadata.costEstimated, false);
     assert.equal(providerCall.url, "https://api.openai.com/v1/chat/completions");
-    assert.equal(JSON.parse(providerCall.options.body).max_tokens, 1200);
+    assert.equal(JSON.parse(providerCall.options.body).max_completion_tokens, 1200);
     assert.match(providerCall.options.headers.Authorization, /sk-proxy-secret-openai/);
     assert.doesNotMatch(JSON.stringify(proxyBody), /sk-proxy-secret-openai/);
   } finally {
@@ -2194,7 +2216,7 @@ async function runAsyncTests() {
 
   provider.setApiKey("openai", "sk-test-openai-hardening");
   await provider.callOpenAI("gpt-4o-mini", "", providerCardData);
-  assert.equal(providerCalls[providerCalls.length - 1].body.max_tokens, provider.maxOutputTokens);
+  assert.equal(providerCalls[providerCalls.length - 1].body.max_completion_tokens, provider.maxOutputTokens);
 
   provider.setApiKey("anthropic", "sk-test-anthropic-hardening");
   await provider.callAnthropic("claude-3-haiku-20240307", "", providerCardData);

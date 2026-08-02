@@ -268,7 +268,7 @@ ${attachments.length ? attachments.join('\n') : 'No attachment metadata loaded.'
                         { role: 'user', content: userPrompt }
                     ],
                     temperature: 0.7,
-                    max_tokens: this.maxOutputTokens,
+                    max_completion_tokens: this.maxOutputTokens,
                     response_format: { type: 'json_object' }
                 })
             });

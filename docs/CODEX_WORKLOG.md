@@ -67,3 +67,10 @@
 - Restricted the default local JSON runtime store to owner-only POSIX permissions and added contract checks without mutating shared temporary directories.
 - Disabled the unimplemented service-restart endpoint rather than claiming a restart; it now records a blocked attempt and returns `503`.
 - Rewrote stale README and Power-Up guide material that promised ground-truth validation, accuracy metrics, fixed speed/cost ranges, or outdated provider details. Current docs state the verified local scope, unmeasured limits, and review boundary.
+- Added approval-gated Trello description replacement: the popup creates an editable draft, requires a checkbox and final confirmation, verifies that the source description has not changed, and records private pending/ambiguous/updated hashes to prevent blind retries. Live Trello verification remains required.
+- Added `tools/evaluate-labeled-summaries.js`, a synthetic-fixture regression test, and `docs/LABELED_EVALUATION_PROTOCOL.md`. The harness measures only deterministic label coverage and review-signal agreement from independently reviewed cases; it deliberately makes no accuracy claim.
+
+## 2026-08-02
+
+- Recorded limited operator-supplied live evidence that the direct browser OpenAI path authenticated and generated a result with `gpt-5.4`; the verification report explicitly preserves the unverified accuracy and deployment boundaries.
+- Corrected popup runtime accounting: local-summary construction and each AI provider attempt are now independently timed. The prior UI could label provider wait time as local work and show zero provider duration. Added regression assertions and reran the full test suite and doctor checks successfully.

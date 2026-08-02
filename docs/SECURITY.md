@@ -7,7 +7,7 @@ Date: 2026-07-23 (Phase 115)
 **Critical rules:**
 - API keys (OpenAI, Anthropic, Google) are stored in browser member-private Trello storage only. They are never logged or transmitted to the Trello server.
 - Proxy endpoint credentials are configured separately from browser-held keys.
-- Backend session-hash secret (`JWT_SECRET`, retained environment-variable name) and admin password must be provided as environment variables — never hardcoded.
+- Backend session-hash secret (`JWT_SECRET`, retained environment-variable name; minimum 32 characters) and admin password (minimum 12 characters) must be provided as environment variables — never hardcoded.
 - The backend creates no default end-user account or predictable bootstrap password. Users must register explicitly; tests use disposable, isolated accounts.
 - Account emails are normalized and validated at registration and admin edit time; duplicate identities are rejected.
 - The local backend runtime-store directory is created with owner-only permissions (`0700`) and its JSON state file with owner-only permissions (`0600`) on POSIX hosts. The store is gitignored, but it remains a development-only persistence mechanism rather than a production secret store.

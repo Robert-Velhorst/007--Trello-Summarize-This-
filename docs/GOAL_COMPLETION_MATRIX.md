@@ -18,15 +18,16 @@ Previous: 2026-07-12
 | Bounded text/CSV extraction | Implemented | Optional, limited, approval-aware, and sensitive-card-gated |
 | PDF/Word/Excel/image OCR extraction | Partial | Framework/stubs exist; shipped flow remains metadata-only |
 | Batch execution | Partial | Manual-first queue review exists; unattended execution is not shipped |
-| Trello description writeback | Missing | Not implemented |
+| Trello description writeback | Implemented (local code; live verification pending) | Editable replacement draft, explicit approval/confirmation, source-freshness check, and pending/ambiguous attempt safety are wired in `popup.html`; live Trello verification is required before production use |
 | Production-ready backend/admin subsystem | Partial | Functional local backend exists with auth, credits, admin API, and salted user password hashes. Not production-grade yet (no production DB deployment, env-based admin auth, limited ops hardening). Hardened with security headers in Phase 115. |
 | Backend payment and webhook processing | Missing | Purchase and Stripe webhook routes deliberately return an explicit unavailable response until verified signatures, reconciliation, and provider integration exist; no credits are granted from client input. |
 | Backend unattended batch execution | Missing | The backend deliberately rejects `/api/batch/jobs/:id/run`; reviewed popup execution persists only observed results and must not fabricate analysis or completion. |
 | Required audit/verification docs | Implemented | All required docs present under `docs/` and updated for Phase 115 |
-| Manual Trello runtime verification evidence | Implemented | User-performed live Trello verification completed on 2026-07-12 |
+| Manual Trello runtime verification evidence | Implemented (limited) | User-performed card-context verification completed on 2026-07-12; a direct OpenAI `gpt-5.4` browser-provider run was captured on 2026-08-02. These do not prove production deployment, provider accuracy, or writeback behavior. |
+| Labeled evaluation harness | Implemented | `tools/evaluate-labeled-summaries.js` reports deterministic phrase coverage, forbidden-phrase violations, and review-signal agreement from privately supplied labeled cases; the checked-in fixture is synthetic only |
 | Measured accuracy proof | Missing | Confidence is a review signal, not measured correctness proof |
 | List trend signals and planning brief | Implemented | Active in summarizer-core.js with privacy-bounded list metadata |
-| Budget tracking and cost records | Implemented | Provider monthly limits, warning/exceeded alerts in summarizer-core.js |
+| Budget tracking and cost records | Partial | Budget logic and settings exist, but direct providers no longer receive guessed monetary estimates. It activates only when a trusted integration explicitly supplies a cost value. |
 | Version checking and update manifest | Implemented | Secure update checking from GitHub releases |
 | Error sanitization | Implemented | Credential, URL, and PII stripping in ai-providers.js, trello-integration.js, attachment-processor.js |
 | Security headers (local server) | Implemented | X-Content-Type-Options, X-Frame-Options, Referrer-Policy on dev server and backend |

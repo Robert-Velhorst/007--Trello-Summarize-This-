@@ -1,5 +1,8 @@
 const path = require("node:path");
 
+const MIN_SESSION_SECRET_LENGTH = 32;
+const MIN_ADMIN_PASSWORD_LENGTH = 12;
+
 function env() {
   return {
     PORT: Number(process.env.API_PORT || process.env.PORT || 8787),
@@ -35,8 +38,12 @@ function isAllowedBackendOrigin(origin) {
 function missingEnvForBackend() {
   const current = env();
   const missing = [];
-  if (!current.JWT_SECRET) missing.push("JWT_SECRET");
-  if (!current.ADMIN_PASSWORD) missing.push("ADMIN_PASSWORD");
+  if (String(current.JWT_SECRET).length < MIN_SESSION_SECRET_LENGTH) {
+    missing.push(`JWT_SECRET (minimum ${MIN_SESSION_SECRET_LENGTH} characters)`);
+  }
+  if (String(current.ADMIN_PASSWORD).length < MIN_ADMIN_PASSWORD_LENGTH) {
+    missing.push(`ADMIN_PASSWORD (minimum ${MIN_ADMIN_PASSWORD_LENGTH} characters)`);
+  }
   return missing;
 }
 
@@ -128,6 +135,8 @@ const exported = {
   get GOOGLE_API_KEY() {
     return env().GOOGLE_API_KEY;
   },
+  MIN_SESSION_SECRET_LENGTH,
+  MIN_ADMIN_PASSWORD_LENGTH,
   missingEnvForBackend,
   backendReadiness,
   powerUpReadiness,

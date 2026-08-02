@@ -39,8 +39,8 @@ npm run start:backend
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Secret used to key opaque session-token hashes (min 32 chars recommended; retained name for compatibility) |
-| `ADMIN_PASSWORD` | Yes | Admin panel password |
+| `JWT_SECRET` | Yes | Secret used to key opaque session-token hashes (minimum 32 characters; retained name for compatibility) |
+| `ADMIN_PASSWORD` | Yes | Local admin panel password (minimum 12 characters) |
 | `TRELLO_APP_KEY` | Recommended | Trello Power-Up app key for comment/auth routes |
 | `OPENAI_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
 | `ANTHROPIC_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
@@ -143,7 +143,7 @@ See `proxy/README.md` for full instructions.
 3. No real database integration.
 4. Binary attachment content (PDF, Word, images) is metadata-only.
 5. Batch execution is manual-first — no automated unattended batch; the server deliberately rejects `/run` rather than inventing completed analyses.
-6. Trello description writeback is not implemented.
+6. Trello description replacement is wired with explicit approval and source-freshness checks, but requires live Trello verification before production use.
 7. Measured accuracy proof is not available — confidence is a heuristic signal.
 
 ## Blocked Items and External Requirements

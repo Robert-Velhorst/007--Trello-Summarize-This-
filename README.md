@@ -56,7 +56,7 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 - **Binary attachments remain partial** - PDF, Word, Excel, and image OCR are not fully extracted in the shipped flow
 - **Batch support is manual-first** - The popup prepares and reviews queue items, but does not run unattended full-card batch analysis
 - **Confidence is a review signal** - It is not a measured guarantee of correctness
-- **Trello writeback is gated** - Comment posting requires explicit review and approval; card description writeback is not implemented
+- **Trello writes are gated** - Comment posting and description replacement require explicit review and confirmation; description updates also check for a changed source before writing
 
 ---
 
@@ -434,7 +434,7 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 
 ### 🚧 Partial or not shipped
 - Binary attachment extraction (PDF, Office, and image OCR)
-- Unattended batch execution and description writeback
+- Unattended batch execution and live re-verification of description replacement
 - Measured accuracy and production performance evidence
 
 ### 📋 External requirements

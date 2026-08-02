@@ -3,6 +3,12 @@
 Date: 2026-07-25
 Previous: 2026-07-23 (Phase 115)
 
+## Additional Manual Runtime Evidence (2026-08-02)
+
+- An operator configured a newly rotated OpenAI API key in Trello member-private Power-Up settings and ran the browser Power-Up against the `Implement user authentication system` card on `Summarize This Test Board`.
+- The captured result identifies the provider as OpenAI and model as `gpt-5.4`, with a provider usage record (2,678 tokens and an estimated $0.0008). This verifies that the direct browser-to-OpenAI path can authenticate and produce a result for that operator; it does not verify provider accuracy, shared-user behavior, billing reconciliation, or production deployment.
+- The captured runtime panel misattributed provider time to the local-summary stage. `popup.html` now measures local construction and every AI provider attempt independently; this correction passed automated verification. A repeat live run after deploying the updated popup is still required to verify the displayed timing in Trello.
+
 ## What Was Verified
 
 ### Automated Verification (2026-07-25)
@@ -53,6 +59,7 @@ node -e "require('./summarizer-core'); require('./card-intelligence-ledger'); re
 - `backend-app.js`: Malformed JSON and oversized request bodies now return `400`/`413` client errors rather than being recorded as generic server failures; the backend contract suite covers malformed JSON.
 - `backend-app.js` and `backend-storage.js`: Opaque session-token hashes are keyed with the required session secret; expired or malformed-expiry sessions fail closed, operational counts exclude expired sessions, and the default local runtime store uses owner-only POSIX permissions. Contract tests cover keyed hashes, expiry, and storage modes.
 - Documentation: README and Power-Up guidance no longer promise ground-truth validation, measured accuracy, fixed provider pricing, or fixed processing time; they describe the verified local scope and operator review boundary.
+- `tools/evaluate-labeled-summaries.js` and `evaluation.test.js`: Added a deterministic labeled-evaluation harness for phrase coverage, forbidden-phrase violations, and review-signal agreement. Its synthetic fixture is explicitly not performance evidence, and the protocol documents the required human-label and held-out-set controls.
 - Previously verified Phase 115 changes remain in place: `test.js` regex fix, `connector.js` error boundaries, security headers/CORS in local server and backend app, and expanded `doctor.js` checks.
 
 ### Repository Integrity Verified
@@ -73,7 +80,8 @@ node -e "require('./summarizer-core'); require('./card-intelligence-ledger'); re
 - Binary attachment extraction beyond text/CSV is not fully implemented in the shipped flow.
 - Backend/admin subsystem is functional with a local JSON runtime store, but not production-grade: no production database deployment, admin auth still relies on environment credentials, and the subsystem is not verified for production deployment.
 - The live Trello verification evidence is user-performed manual evidence (2026-07-12) rather than locally reproducible automated evidence.
-- Trello description writeback is not implemented.
+- Direct OpenAI browser-provider use was manually verified for one operator on 2026-08-02, but is still not a substitute for independent accuracy evaluation, a deployment review, or multi-user testing.
+- Trello description replacement is implemented locally with explicit approval, confirmation, source-freshness checks, and ambiguity protection, but it has not yet been live-verified in Trello.
 - Measured accuracy proof is not available; confidence is a heuristic signal.
 - Payments, Stripe webhooks, and unattended server-side batch analysis are intentionally unavailable; they require verified provider integrations and a real worker before they can be enabled.
 
@@ -137,6 +145,6 @@ This repository is a truthfully scoped Trello Power-Up with:
 - Automated test coverage for core logic and contracts
 - Manual live-runtime verification evidence (2026-07-12)
 - A functional local backend that is honestly documented as not production-grade
-- Incomplete areas (description writeback, measured accuracy, binary OCR) clearly labeled Missing or Partial
+- Incomplete areas (live description-write verification, measured accuracy, binary OCR) clearly labeled Missing or Partial
 
 Phase 115 is **complete** for the verified local scope. Production readiness requires: external provider credentials, live Trello Power-Up listing approval, and persistent database provisioning.

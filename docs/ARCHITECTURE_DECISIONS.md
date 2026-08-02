@@ -75,6 +75,6 @@ Date: 2026-07-23 (Phase 004)
 
 **Context:** The product can generate Trello comment drafts. Auto-posting without review is a safety risk.
 
-**Decision:** All Trello writes (comment post, future description writeback) require explicit human approval in the popup UI before execution.
+**Decision:** All Trello writes (comment post and description replacement) require explicit human approval in the popup UI before execution.
 
 **Rationale:** Aligns with the "human operator in the loop" requirement from the product brief.

@@ -727,7 +727,7 @@
           <span class="metric-label">Tokens</span>
         </div>
         <div class="metric">
-          <span id="costMetric" class="metric-value">$0.0000</span>
+          <span id="costMetric" class="metric-value">Not estimated</span>
           <span class="metric-label">Estimated cost</span>
         </div>
         <div class="metric">
@@ -1035,6 +1035,20 @@
       </section>
 
       <section class="panel">
+        <h2 class="section-title">Approve Trello description update</h2>
+        <p id="descriptionWriteStatus" class="section-body">Review and edit the exact replacement description before updating the card.</p>
+        <textarea id="descriptionWritePreview" class="postback-preview" aria-label="Trello description replacement draft"></textarea>
+        <label class="checkbox-row" for="descriptionWriteApproval">
+          <input id="descriptionWriteApproval" type="checkbox">
+          <span>I reviewed this replacement description and approve updating this Trello card.</span>
+        </label>
+        <div class="actions">
+          <button class="secondary" type="button" id="copyDescriptionDraftButton">Copy description draft</button>
+          <button class="primary" type="button" id="updateDescriptionButton" disabled>Update Trello description</button>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2 class="section-title">Review / correction</h2>
         <p class="section-body">Feedback is stored in your private Power-Up data and is not posted to Trello.</p>
         <textarea id="correctionText" placeholder="Optional correction or missing context"></textarea>
@@ -1176,9 +1190,12 @@
       });
       document.getElementById("historyList").addEventListener("click", copyHistoryRun);
       document.getElementById("postbackApproval").addEventListener("change", updatePostbackControls);
+      document.getElementById("descriptionWriteApproval").addEventListener("change", updateDescriptionWriteControls);
       document.getElementById("exportSensitiveApproval").addEventListener("change", updateSensitiveExportControls);
       document.getElementById("copyPostbackButton").addEventListener("click", copyPostbackDraft);
       document.getElementById("postCommentButton").addEventListener("click", postApprovedComment);
+      document.getElementById("copyDescriptionDraftButton").addEventListener("click", copyDescriptionDraft);
+      document.getElementById("updateDescriptionButton").addEventListener("click", updateApprovedDescription);
       document.getElementById("copyPlainTextButton").addEventListener("click", function () {
         copyLedgerExport("plain-text");
       });
@@ -1309,14 +1326,11 @@
           setStatus("Building summary", "Creating a reliable local summary first.");
           var analyzed = await analyzeCardDataWithSettings(cardData, settings, {
             allowSensitiveAi: allowSensitiveAi,
+            timingTracker: timingTracker,
             onAiStart: function () {
               setStatus("Calling AI provider", "Asking the configured provider or proxy for a structured project summary.");
             }
           });
-          timingTracker.mark("local-summary", "Local summary");
-          if (analyzed.usedAiAttempt) {
-            timingTracker.mark("ai-provider", "AI provider");
-          }
 
           lastAnalysis = analyzed.analysis;
           lastLedgerRun = createLedgerRunForAnalysis(cardData, analyzed.analysis, settings, promptProfile, cacheProfile, cacheProfileHash);
@@ -1341,9 +1355,13 @@
       async function analyzeCardDataWithSettings(cardData, settings, options) {
         var allowSensitiveAi = Boolean(options && options.allowSensitiveAi);
         var sensitiveSignals = options && options.sensitiveSignals ? options.sensitiveSignals : SummarizeThis.detectSensitiveSignals(cardData);
+        var localSummaryStartedAt = nowMs();
         var localAnalysis = SummarizeThis.buildRuleBasedAnalysis(cardData, {
           outputLanguage: settings.outputLanguage
         });
+        if (options && options.timingTracker) {
+          options.timingTracker.recordStage("local-summary", "Local summary", localSummaryStartedAt, nowMs());
+        }
         var analysis = localAnalysis;
         var warning = "";
         var usedAiAttempt = false;
@@ -1361,6 +1379,7 @@
               if (options && typeof options.onAiStart === "function") {
                 options.onAiStart();
               }
+              var providerStartedAt = nowMs();
               try {
                 analysis = await runConfiguredAI(cardData, settings, localAnalysis);
                 if (analysis.metadata && analysis.metadata.consensusRequested && analysis.metadata.consensusProviderCount < 2) {
@@ -1372,6 +1391,10 @@
                 }
                 warning = appendWarning(warning, "AI analysis was not available, so this result uses the built-in summarizer. Provider message: " + sanitizeUserVisibleError(error));
                 analysis = localAnalysis;
+              } finally {
+                if (options && options.timingTracker) {
+                  options.timingTracker.recordStage("ai-provider", "AI provider", providerStartedAt, nowMs());
+                }
               }
             }
           } else if (settings.analysisMode === "ai-only") {
@@ -2472,9 +2495,12 @@
         var tokenTotal = results.reduce(function (total, result) {
           return total + Number(result.metadata && result.metadata.tokens || 0);
         }, 0);
-        var costTotal = results.reduce(function (total, result) {
+        var costsEstimated = results.length > 0 && results.every(function (result) {
+          return Boolean(result.metadata && result.metadata.costEstimated === true);
+        });
+        var costTotal = costsEstimated ? results.reduce(function (total, result) {
           return total + Number(result.metadata && result.metadata.cost || 0);
-        }, 0);
+        }, 0) : null;
         var qualityScore = Math.min(98, Math.max.apply(null, results.map(function (result) {
           return Number(result.qualityScore) || localAnalysis.qualityScore || 0;
         })) + (results.length > 1 ? 2 : 0));
@@ -2485,7 +2511,8 @@
             provider: results.length > 1 ? "AI consensus" : providerNames[0],
             model: modelNames.join(" + "),
             tokens: tokenTotal,
-            cost: Number(costTotal.toFixed(6)),
+            cost: costsEstimated ? Number(costTotal.toFixed(6)) : null,
+            costEstimated: costsEstimated,
             consensusRequested: true,
             consensusProviderCount: results.length,
             consensusProviders: providerNames
@@ -2575,12 +2602,20 @@
           provider: "AI proxy",
           model: data.model || model || "proxy",
           tokens: Number(data.tokens) || 0,
-          cost: Number(data.cost) || 0
+          cost: null,
+          costEstimated: false
         }, data.metadata || {});
         metadata.provider = metadata.provider || "AI proxy";
         metadata.model = metadata.model || data.model || model || "proxy";
         metadata.tokens = Number(metadata.tokens) || 0;
-        metadata.cost = Number(metadata.cost) || 0;
+        var proxyCost = Number(metadata.cost);
+        metadata.costEstimated = metadata.costEstimated === true
+          && metadata.cost !== null
+          && metadata.cost !== undefined
+          && metadata.cost !== ""
+          && Number.isFinite(proxyCost)
+          && proxyCost >= 0;
+        metadata.cost = metadata.costEstimated ? proxyCost : null;
         return createAIAnalysis(content, localAnalysis, metadata);
       }
 
@@ -2675,7 +2710,7 @@
             ],
             response_format: { type: "json_object" },
             temperature: 0.2,
-            max_tokens: maxOutputTokens
+            max_completion_tokens: maxOutputTokens
           })
         }, 30000);
 
@@ -2691,7 +2726,8 @@
           provider: "OpenAI",
           model: model,
           tokens: data.usage ? data.usage.total_tokens : 0,
-          cost: estimateOpenAICost(model, data.usage)
+          cost: null,
+          costEstimated: false
         });
       }
 
@@ -2726,7 +2762,8 @@
           provider: "Google AI",
           model: model,
           tokens: data.usageMetadata ? data.usageMetadata.totalTokenCount : 0,
-          cost: 0
+          cost: null,
+          costEstimated: false
         });
       }
 
@@ -2758,7 +2795,8 @@
           provider: "Anthropic",
           model: model,
           tokens: data.usage ? (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0) : 0,
-          cost: 0
+          cost: null,
+          costEstimated: false
         });
       }
 
@@ -2821,16 +2859,6 @@
         };
       }
 
-      function estimateOpenAICost(model, usage) {
-        if (!usage) return 0;
-        var rates = {
-          "gpt-4o": { input: 0.005 / 1000, output: 0.015 / 1000 },
-          "gpt-4o-mini": { input: 0.00015 / 1000, output: 0.0006 / 1000 }
-        };
-        var rate = rates[model] || rates["gpt-4o-mini"];
-        return ((usage.prompt_tokens || 0) * rate.input) + ((usage.completion_tokens || 0) * rate.output);
-      }
-
       function renderAnalysis(cardData, analysis, warning, ledgerRun) {
         var summary = analysis.summary;
         var result = ledgerRun && ledgerRun.result ? ledgerRun.result : null;
@@ -2848,7 +2876,9 @@
         document.getElementById("providerMetric").textContent = analysis.metadata.provider;
         document.getElementById("qualityMetric").textContent = result && result.confidence ? result.confidence.overall + "%" : analysis.qualityScore + "%";
         document.getElementById("tokensMetric").textContent = String(analysis.metadata.tokens || 0);
-        document.getElementById("costMetric").textContent = "$" + Number(analysis.metadata.cost || 0).toFixed(4);
+        document.getElementById("costMetric").textContent = analysis.metadata && analysis.metadata.costEstimated === true
+          ? "$" + Number(analysis.metadata.cost).toFixed(4)
+          : "Not estimated";
 
         renderOperationalDigest(ledgerRun);
         document.getElementById("aboutText").textContent = summary.about;
@@ -2876,6 +2906,7 @@
         renderPriorFeedback(cardData.priorFeedback);
         renderOutputMode(ledgerRun);
         renderPostbackDraft(ledgerRun);
+        renderDescriptionWriteDraft(ledgerRun);
       }
 
       function renderOutputMode(ledgerRun) {
@@ -3518,6 +3549,14 @@
         updatePostbackControls();
       }
 
+      function renderDescriptionWriteDraft(ledgerRun) {
+        var preview = document.getElementById("descriptionWritePreview");
+        preview.value = ledgerRun ? CardIntelligenceLedger.createTrelloDescriptionDraft(ledgerRun) : "";
+        document.getElementById("descriptionWriteApproval").checked = false;
+        document.getElementById("descriptionWriteStatus").textContent = "Review and edit the exact replacement description before updating the card.";
+        updateDescriptionWriteControls();
+      }
+
       function hasSensitiveSignals() {
         return Boolean(lastSensitiveSignals && lastSensitiveSignals.requiresAiApproval);
       }
@@ -3577,6 +3616,195 @@
 
       function canPostTrelloComment() {
         return Boolean(t && inTrello && lastCardData && lastCardData.id && typeof t.getRestApi === "function");
+      }
+
+      function currentCardDescription() {
+        return String(lastCardData && (lastCardData.desc !== undefined ? lastCardData.desc : lastCardData.description) || "");
+      }
+
+      function updateDescriptionWriteControls() {
+        var preview = document.getElementById("descriptionWritePreview");
+        var approval = document.getElementById("descriptionWriteApproval");
+        var copyButton = document.getElementById("copyDescriptionDraftButton");
+        var updateButton = document.getElementById("updateDescriptionButton");
+        var status = document.getElementById("descriptionWriteStatus");
+        var hasDraft = Boolean(preview.value.trim());
+        var approved = Boolean(approval.checked);
+        var canWrite = canPostTrelloComment();
+
+        copyButton.disabled = !hasDraft || !approved;
+        updateButton.disabled = !hasDraft || !approved || !canWrite;
+
+        if (!hasDraft) {
+          status.textContent = "Analyze the card first to create a description replacement draft.";
+        } else if (!approved) {
+          status.textContent = hasSensitiveSignals()
+            ? "Sensitive card context was detected. Review the exact replacement and tick approval before copying or updating Trello."
+            : "Review and edit the exact replacement description, then tick approval before copying or updating Trello.";
+        } else if (!canWrite) {
+          status.textContent = "Description updates are not available in this Power-Up runtime. Copy the approved draft instead.";
+        } else {
+          status.textContent = "Ready to replace the Trello card description with the reviewed draft.";
+        }
+      }
+
+      function requireSensitiveDescriptionApproval() {
+        if (!hasSensitiveSignals()) return false;
+        var approved = Boolean(document.getElementById("descriptionWriteApproval").checked);
+        var review = sensitiveReviewFor("trello-description", approved);
+        if (!review.requiresApproval) return false;
+        document.getElementById("descriptionWriteStatus").textContent = "Sensitive card context was detected. Review the exact replacement and tick approval before copying or updating Trello.";
+        elements.confidencePill.textContent = "Review description";
+        updateDescriptionWriteControls();
+        return true;
+      }
+
+      function copyDescriptionDraft() {
+        var text = document.getElementById("descriptionWritePreview").value;
+        if (!text.trim() || !lastLedgerRun) return;
+        if (!document.getElementById("descriptionWriteApproval").checked || requireSensitiveDescriptionApproval()) {
+          updateDescriptionWriteControls();
+          return;
+        }
+        var copied = function () {
+          elements.confidencePill.textContent = "Description copied";
+          document.getElementById("descriptionWriteStatus").textContent = "Approved description draft copied. No Trello card was changed.";
+          recordExport("trello-description-draft", "clipboard", null, true);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(copied).catch(function () {
+            fallbackCopyDescriptionDraft(text, copied);
+          });
+        } else {
+          fallbackCopyDescriptionDraft(text, copied);
+        }
+      }
+
+      function fallbackCopyDescriptionDraft(text, onCopied) {
+        var textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "readonly");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        onCopied();
+      }
+
+      function trelloDescriptionAttemptKey(cardId, originalDescription, replacement) {
+        return String(cardId || "") + ":" + compactHash(String(originalDescription || "")) + ":" + compactHash(String(replacement || ""));
+      }
+
+      async function readTrelloDescriptionAttempt(cardId, originalDescription, replacement) {
+        var attempts = await readPrivateObject("summarizeThisTrelloDescriptionAttempts", {});
+        if (!attempts || typeof attempts !== "object" || Array.isArray(attempts)) attempts = {};
+        var key = trelloDescriptionAttemptKey(cardId, originalDescription, replacement);
+        return { key: key, attempt: attempts[key] || null };
+      }
+
+      async function saveTrelloDescriptionAttempt(cardId, originalDescription, replacement, status) {
+        var attempts = await readPrivateObject("summarizeThisTrelloDescriptionAttempts", {});
+        if (!attempts || typeof attempts !== "object" || Array.isArray(attempts)) attempts = {};
+        var key = trelloDescriptionAttemptKey(cardId, originalDescription, replacement);
+        attempts[key] = {
+          cardId: String(cardId || ""),
+          originalDescriptionHash: compactHash(String(originalDescription || "")),
+          replacementHash: compactHash(String(replacement || "")),
+          status: status,
+          updatedAt: new Date().toISOString()
+        };
+        var retained = {};
+        Object.keys(attempts).sort(function (left, right) {
+          return String(attempts[right].updatedAt || "").localeCompare(String(attempts[left].updatedAt || ""));
+        }).slice(0, 100).forEach(function (entryKey) {
+          retained[entryKey] = attempts[entryKey];
+        });
+        await writePrivateObject("summarizeThisTrelloDescriptionAttempts", retained);
+        return retained[key];
+      }
+
+      async function updateApprovedDescription() {
+        if (!lastLedgerRun || !lastCardData) return;
+        var approval = document.getElementById("descriptionWriteApproval");
+        var replacement = document.getElementById("descriptionWritePreview").value;
+        var originalDescription = currentCardDescription();
+        var status = document.getElementById("descriptionWriteStatus");
+        if (!approval.checked || !replacement.trim()) {
+          updateDescriptionWriteControls();
+          return;
+        }
+        if (requireSensitiveDescriptionApproval()) return;
+        if (!canPostTrelloComment()) {
+          status.textContent = "Description updates are not available in this Power-Up runtime. Copy the approved draft instead.";
+          return;
+        }
+        var previousAttempt = await readTrelloDescriptionAttempt(lastCardData.id, originalDescription, replacement);
+        if (previousAttempt.attempt && previousAttempt.attempt.status === "updated") {
+          status.textContent = "This exact replacement is already recorded as updated. Reanalyze the card before making another description change.";
+          return;
+        }
+        if (previousAttempt.attempt && (previousAttempt.attempt.status === "pending" || previousAttempt.attempt.status === "ambiguous")) {
+          status.textContent = "The outcome of this exact description replacement is uncertain. Check the Trello card manually before trying again.";
+          return;
+        }
+        if (!window.confirm("Replace the current Trello card description with this exact reviewed draft? This overwrites the existing description.")) {
+          return;
+        }
+
+        document.getElementById("updateDescriptionButton").disabled = true;
+        status.textContent = "Checking the current Trello description before updating...";
+        var attemptRecorded = false;
+        var updated = false;
+        try {
+          var rest = await t.getRestApi();
+          if (!rest || typeof rest.getToken !== "function") throw new Error("REST API helper was not available in this Power-Up runtime.");
+          var signedIn = typeof rest.isMemberSignedIn === "function" ? await rest.isMemberSignedIn() : true;
+          if (!signedIn) throw new Error("Not authorized. Use \"Authorize account\" in Power-Up settings first.");
+          var token = await rest.getToken();
+          if (!token) throw new Error("Not authorized. Use \"Authorize account\" in Power-Up settings first.");
+          var appKey = trelloAppKey();
+          if (!appKey) throw new Error("Trello app key is not configured for description updates.");
+          var url = "https://api.trello.com/1/cards/" + encodeURIComponent(lastCardData.id) + "?key=" + encodeURIComponent(appKey) + "&token=" + encodeURIComponent(token);
+          var currentResponse = await fetch(url + "&fields=desc", { method: "GET" });
+          if (!currentResponse.ok) throw new Error("Could not read the current Trello description (status " + currentResponse.status + ").");
+          var currentCard = await currentResponse.json();
+          if (String(currentCard && currentCard.desc || "") !== originalDescription) {
+            throw new Error("The Trello description changed since this analysis. Reanalyze the card and review a fresh replacement before updating it.");
+          }
+
+          await saveTrelloDescriptionAttempt(lastCardData.id, originalDescription, replacement, "pending");
+          attemptRecorded = true;
+          status.textContent = "Updating the reviewed Trello description...";
+          var response = await fetch(url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ desc: replacement })
+          });
+          if (!response.ok) {
+            var bodyText = "";
+            try { bodyText = await response.text(); } catch (e) {}
+            throw new Error("Trello API request failed (status " + response.status + "). " + bodyText);
+          }
+
+          await saveTrelloDescriptionAttempt(lastCardData.id, originalDescription, replacement, "updated");
+          lastCardData.desc = replacement;
+          lastCardData.description = replacement;
+          approval.checked = false;
+          updated = true;
+          elements.confidencePill.textContent = "Description updated";
+          status.textContent = "Reviewed Trello description updated.";
+          await recordExport("trello-description", "trello-description", null, true);
+        } catch (error) {
+          if (attemptRecorded) await saveTrelloDescriptionAttempt(lastCardData.id, originalDescription, replacement, "ambiguous");
+          status.textContent = attemptRecorded
+            ? "Could not confirm the Trello description outcome: " + sanitizeUserVisibleError(error) + " Check the card manually before trying this exact replacement again."
+            : "Could not prepare the description update: " + sanitizeUserVisibleError(error) + " Copy the approved draft instead.";
+        } finally {
+          updateDescriptionWriteControls();
+          if (updated) status.textContent = "Reviewed Trello description updated.";
+        }
       }
 
       function updatePostbackControls() {
@@ -4367,6 +4595,9 @@
           cardTitle: cardData && cardData.name,
           now: ledgerRun && ledgerRun.completedAt
         };
+        if (metadata.costEstimated !== true) {
+          return { alert: null, records: records };
+        }
         var alert = SummarizeThis.evaluateBudgetAlert(records, metadata, settings && settings.budget, options);
         var record = SummarizeThis.createCostRecord(metadata, options);
 
@@ -4420,6 +4651,17 @@
               durationMs: current - lastMark
             });
             lastMark = current;
+          },
+          recordStage: function (key, label, startedAt, endedAt) {
+            var start = Number(startedAt);
+            var end = Number(endedAt);
+            var duration = Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0;
+            stages.push({
+              key: key,
+              label: label,
+              durationMs: duration
+            });
+            if (Number.isFinite(end)) lastMark = Math.max(lastMark, end);
           },
           stages: function () {
             return stages.slice();

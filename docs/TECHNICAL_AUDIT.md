@@ -54,6 +54,7 @@ This surface supports:
 - Proxy mode is implemented as an optional path, but requires external deployment and credentials.
 - Backend/admin subsystem exists and is functional with a local JSON runtime store, but is not verified as production-grade. User passwords use salted hashes; no production database or production-grade authentication system exists.
 - `DATABASE_URL` does not activate a PostgreSQL backend. The backend explicitly supports only the local JSON store and rejects an explicit non-local store request, avoiding a false persistence claim.
+- Local JSON persistence serializes writes inside one backend process to avoid temporary-file collisions, but it remains unsuitable for multi-instance deployment or production database guarantees.
 
 ## Inactive Or Disconnected Areas
 

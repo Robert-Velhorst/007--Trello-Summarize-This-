@@ -57,7 +57,7 @@ POST /api/auth/register { email, password, name } → 201 { success, user, token
 POST /api/auth/login    { email, password }        → 200 { success, user, token }
 ```
 
-Authentication and registration attempts are throttled before password verification. A throttled request returns `429` with `retryAfterSeconds`; the local limits are documented in `docs/RATE_LIMIT_POLICY.md`.
+Authentication and registration attempts are throttled by both normalized email and direct socket client address before password verification. A throttled request returns `429` with `retryAfterSeconds`; the local limits are documented in `docs/RATE_LIMIT_POLICY.md`.
 
 Registration requires a valid email address. Admin user updates reject malformed email addresses (`400`) and duplicate addresses (`409`).
 User roles are not editable through the admin user-update route (`422`); admin authority comes only from the separate admin session login.
@@ -72,7 +72,7 @@ POST /api/summarize { text } → 200 { success, summary, creditsUsed, remaining 
 
 ## Error Sanitization
 
-Malformed JSON bodies return `400`; bodies larger than the backend limit return `413`. These expected client errors do not create a high-severity runtime alert.
+Malformed JSON bodies return `400`; bodies larger than the backend limit return `413`. These expected client errors do not create a high-severity runtime alert. Unexpected server failures return only `500 { success: false, error: "Internal server error" }`; their detailed message is retained in the local high-severity alert record rather than sent to the caller.
 
 ### Reviewed Batch Ledger
 

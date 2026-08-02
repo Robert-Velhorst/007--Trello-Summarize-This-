@@ -38,7 +38,7 @@ The current critical path for the shipped Power-Up is:
 - Sensitive-card gating must keep attachment extraction and provider handoff limited until approval is granted.
 - Trello comment posting must stay opt-in and approval-gated.
 - Batch processing requires explicit AI-handoff approval; its outputs remain review-required and it must not write to Trello cards.
-- Card description writeback is not part of the current critical path.
+- Card description replacement is an optional, approval-gated path outside the default critical path; it requires separate live Trello verification before production use.
 - AI summaries must separate facts, inferences, uncertainty, and unsupported claims.
 - Model-reported facts, inferences, uncertainty, and unsupported claims are displayed separately from source-derived card evidence and require human review.
 - Confidence is a review signal, not a measured correctness guarantee.

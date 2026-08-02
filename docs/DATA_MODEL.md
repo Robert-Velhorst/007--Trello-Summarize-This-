@@ -98,5 +98,5 @@ Date: 2026-07-23 (Phase 005)
 |---|---|---|
 | Settings | Trello member-private storage | Survives browser restarts |
 | Ledger history | Trello member-private storage | Survives browser restarts |
-| Backend state | Local JSON runtime file | Survives a normal process restart; created owner-only on POSIX hosts, but is not a production database, backup solution, or multi-instance store |
+| Backend state | Local JSON runtime file | Survives a normal process restart; writes are serialized within one backend process and files are owner-only on POSIX hosts, but it is not a production database, backup solution, or multi-instance store |
 | AI provider keys | Trello member-private storage | Never sent to any server by default |

@@ -1,16 +1,17 @@
 const config = require("./backend-config");
 
 const readiness = config.backendReadiness();
+const hasMissing = (name) => readiness.missing.some((item) => item.startsWith(name));
 const checks = [
   {
     label: "Session hash secret configured",
-    ok: !readiness.missing.includes("JWT_SECRET"),
-    detail: readiness.missing.includes("JWT_SECRET") ? "Set JWT_SECRET for keyed session-token hashing." : "Present"
+    ok: !hasMissing("JWT_SECRET"),
+    detail: hasMissing("JWT_SECRET") ? "Set JWT_SECRET to at least 32 characters for keyed session-token hashing." : "Present"
   },
   {
     label: "Admin password configured",
-    ok: !readiness.missing.includes("ADMIN_PASSWORD"),
-    detail: readiness.missing.includes("ADMIN_PASSWORD") ? "Set ADMIN_PASSWORD for the local admin bootstrap account." : "Present"
+    ok: !hasMissing("ADMIN_PASSWORD"),
+    detail: hasMissing("ADMIN_PASSWORD") ? "Set ADMIN_PASSWORD to at least 12 characters for the local admin bootstrap account." : "Present"
   },
   {
     label: "Database runtime boundary",

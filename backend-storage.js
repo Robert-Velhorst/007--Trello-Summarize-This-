@@ -73,6 +73,7 @@ class LocalBackendStore {
   constructor(options = {}) {
     this.filePath = resolveBackendFilePath(options);
     this.state = null;
+    this.persistQueue = Promise.resolve();
   }
 
   async initialize(seedPasswordRecord) {
@@ -123,11 +124,16 @@ class LocalBackendStore {
 
   async persist() {
     this.state.meta.updatedAt = nowIso();
+    const serializedState = JSON.stringify(this.state, null, 2);
     const next = `${this.filePath}.tmp`;
-    await fsp.writeFile(next, JSON.stringify(this.state, null, 2), { mode: PRIVATE_FILE_MODE });
-    await fsp.chmod(next, PRIVATE_FILE_MODE);
-    await fsp.rename(next, this.filePath);
-    await fsp.chmod(this.filePath, PRIVATE_FILE_MODE);
+    const write = this.persistQueue.then(async () => {
+      await fsp.writeFile(next, serializedState, { mode: PRIVATE_FILE_MODE });
+      await fsp.chmod(next, PRIVATE_FILE_MODE);
+      await fsp.rename(next, this.filePath);
+      await fsp.chmod(this.filePath, PRIVATE_FILE_MODE);
+    });
+    this.persistQueue = write.catch(() => {});
+    return write;
   }
 
   async snapshot() {

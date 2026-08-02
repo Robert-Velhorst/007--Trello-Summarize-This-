@@ -10,8 +10,10 @@
     "doctor": "node doctor.js",
     "doctor:backend": "node backend-doctor.js",
     "test": "node test.js && node backend.test.js",
+    "test:evaluation": "node evaluation.test.js",
     "test:adversarial": "node adversarial.test.js",
-    "test:all": "node test.js && node backend.test.js && node adversarial.test.js",
+    "test:all": "node test.js && node backend.test.js && node adversarial.test.js && node evaluation.test.js",
+    "evaluate:labeled": "node tools/evaluate-labeled-summaries.js",
     "flags": "node -e \"const f=require('./feature-flags'); f.getAllFlags().forEach(fl=>console.log((fl.effectiveValue?'[ON] ':'[OFF]')+fl.key+' - '+fl.description))\"",
     "analyze:resources": "node tools/resource-analysis.js",
     "build:windows-installer": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/windows/build-installer.ps1"

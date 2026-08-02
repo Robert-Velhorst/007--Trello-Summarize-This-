@@ -73,7 +73,7 @@ Previous: 2026-07-10
 - No actions are hidden that would appear active to the user.
 - No unapproved or background batch execution path exists; the reviewed popup runner only starts after explicit AI-handoff approval and keeps Trello writes off.
 - `DOMContentLoaded -> checkForUpdates()` auto-trigger is explicitly absent (verified in test.js).
-- Card description writeback has no UI entry point — it is simply not implemented.
+- Card description replacement has a dedicated editable draft, approval checkbox, final confirmation, source-freshness check, and durable pending/ambiguous outcome protection. It remains pending live Trello verification.
 
 ## Phase 115 Changes
 

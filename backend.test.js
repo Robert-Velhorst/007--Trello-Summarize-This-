@@ -5,8 +5,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { PassThrough } = require("node:stream");
 
-process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin-secret";
+process.env.JWT_SECRET = "test-session-secret-for-contract-tests-32chars";
+process.env.ADMIN_PASSWORD = "test-admin-password-12-chars";
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@example.com";
 process.env.OPENAI_API_KEY = "";
 process.env.ANTHROPIC_API_KEY = "";
@@ -16,12 +16,13 @@ process.env.DATABASE_URL = "";
 
 const { createBackendApp } = require("./backend-app");
 const { DEFAULT_RUNTIME_STORE_PATH, LocalBackendStore } = require("./backend-storage");
+const backendConfig = require("./backend-config");
 
 function sessionTokenHash(token) {
   return crypto.createHmac("sha256", process.env.JWT_SECRET).update(token).digest("hex");
 }
 
-async function requestJson(app, method, targetPath, body, headers = {}, rawBody) {
+async function requestJson(app, method, targetPath, body, headers = {}, rawBody, remoteAddress = "127.0.0.1") {
   const payload = rawBody === undefined ? (body === undefined ? "" : JSON.stringify(body)) : String(rawBody);
   const normalizedHeaders = Object.fromEntries(
     Object.entries(Object.assign({
@@ -34,7 +35,7 @@ async function requestJson(app, method, targetPath, body, headers = {}, rawBody)
   req.method = method;
   req.url = targetPath;
   req.headers = normalizedHeaders;
-  req.socket = { remoteAddress: "127.0.0.1" };
+  req.socket = { remoteAddress };
 
   const res = new PassThrough();
   res.statusCode = 200;
@@ -89,6 +90,28 @@ async function main() {
   assert.equal(health.status, 200);
   assert.equal(health.data.status, "ok");
   assert.equal(health.data.storage.users, 0);
+  const concurrentEventIds = Array.from({ length: 8 }, (_item, index) => `concurrent-event-${index}`);
+  await Promise.all(concurrentEventIds.map((id) => app.store.add("events", {
+    id,
+    type: "contract.concurrent_write",
+    payload: { userId: "contract-user", index: id }
+  })));
+  const concurrentSnapshot = await app.store.snapshot();
+  assert.equal(concurrentSnapshot.events.filter((item) => concurrentEventIds.includes(item.id)).length, concurrentEventIds.length);
+  const persistedConcurrentStore = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  assert.equal(persistedConcurrentStore.events.filter((item) => concurrentEventIds.includes(item.id)).length, concurrentEventIds.length);
+  const validReadiness = backendConfig.backendReadiness();
+  assert.equal(validReadiness.ok, true);
+  const validSessionSecret = process.env.JWT_SECRET;
+  const validAdminPassword = process.env.ADMIN_PASSWORD;
+  process.env.JWT_SECRET = "too-short";
+  process.env.ADMIN_PASSWORD = "short";
+  const weakReadiness = backendConfig.backendReadiness();
+  assert.equal(weakReadiness.ok, false);
+  assert.ok(weakReadiness.missing.some((item) => item.startsWith("JWT_SECRET (minimum 32")));
+  assert.ok(weakReadiness.missing.some((item) => item.startsWith("ADMIN_PASSWORD (minimum 12")));
+  process.env.JWT_SECRET = validSessionSecret;
+  process.env.ADMIN_PASSWORD = validAdminPassword;
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(storageDirectory).mode & 0o077, 0);
     assert.equal(fs.statSync(filePath).mode & 0o077, 0);
@@ -170,6 +193,21 @@ async function main() {
     password: "incorrect-password"
   });
   assert.equal(throttledLogin.status, 429);
+
+  const sharedClientAddress = "198.51.100.22";
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const sharedClientLogin = await requestJson(app, "POST", "/api/auth/login", {
+      email: `client-limit-${attempt}@test.example`,
+      password: "incorrect-password"
+    }, {}, undefined, sharedClientAddress);
+    assert.equal(sharedClientLogin.status, 401);
+  }
+  const sharedClientThrottled = await requestJson(app, "POST", "/api/auth/login", {
+    email: "client-limit-final@test.example",
+    password: "incorrect-password"
+  }, {}, undefined, sharedClientAddress);
+  assert.equal(sharedClientThrottled.status, 429);
+  assert.match(sharedClientThrottled.data.error, /from this client/i);
 
   const readiness = await requestJson(app, "GET", "/api/readiness");
   assert.equal(readiness.status, 200);
@@ -418,7 +456,7 @@ async function main() {
 
     const adminLogin = await requestJson(app, "POST", "/api/admin/auth/login", {
       email: "admin@example.com",
-      password: "admin-secret"
+      password: process.env.ADMIN_PASSWORD
     });
     assert.equal(adminLogin.status, 200);
     assert.ok(adminLogin.data.token);
@@ -672,6 +710,22 @@ async function main() {
       Authorization: `Bearer ${token}`
     });
     assert.equal(profileAfterLogout.status, 401);
+
+  const originalFindUserByEmail = app.store.findUserByEmail.bind(app.store);
+  app.store.findUserByEmail = async () => {
+    throw new Error("unexpected storage failure api_key=must-not-reach-client");
+  };
+  const internalFailure = await requestJson(app, "POST", "/api/auth/register", {
+    email: "internal-failure@test.example",
+    password: "internal-failure-password",
+    name: "Internal Failure"
+  });
+  assert.equal(internalFailure.status, 500);
+  assert.equal(internalFailure.data.error, "Internal server error");
+  assert.doesNotMatch(JSON.stringify(internalFailure.data), /must-not-reach-client/);
+  assert.ok((await app.store.list("systemAlerts")).some((item) => /must-not-reach-client/.test(item.message)));
+  app.store.findUserByEmail = originalFindUserByEmail;
+
   assert.equal(fs.existsSync(filePath), true);
   const customStore = JSON.parse(fs.readFileSync(filePath, "utf8"));
   assert.ok(Array.isArray(customStore.users));

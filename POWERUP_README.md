@@ -136,7 +136,7 @@ You need to host these files on an HTTPS server. Choose one of these options:
 
 ## 💰 Cost and Timing
 
-The repository does not publish verified cost, throughput, or latency estimates. Provider cost and timing depend on the selected model, its current provider pricing, the prompt/card size, attachment policy, and network conditions. Review the provider account and the in-product budget signals before enabling provider calls.
+The repository does not publish verified cost, throughput, or latency estimates. Provider cost and timing depend on the selected model, its current provider pricing, the prompt/card size, attachment policy, and network conditions. Review the provider account before enabling provider calls. The Power-Up shows provider-reported token use, but shows a monetary value only when a trusted integration explicitly provides one.
 
 ## 🐛 Troubleshooting
 
@@ -178,7 +178,7 @@ The Power-Up analyzes:
 
 - The active runtime is the static Power-Up flow in `connector.js`, `popup.html`, `settings-powerup.html`, `summarizer-core.js`, `attachment-processor.js`, `ai-providers.js`, `trello-integration.js`, and `card-intelligence-ledger.js`.
 - Trello comment posting is approval-gated.
-- Trello card description writeback is not implemented.
+- Trello description replacement is approval-gated, checks that the source description has not changed since analysis, and must be live-verified before production use.
 - The audit and verification documents under `docs/` are the source of truth for completion status.
 
 ## 🔄 Updates
@@ -218,7 +218,7 @@ Edit `popup.html`, find `formatCardDataForAI()` function and modify the prompt t
 2. **Review source material**: Treat every confidence value and AI statement as a review signal
 3. **Configure only necessary providers**: Verify each account, model, pricing, and data-handling policy
 4. **Review regularly**: Check private analysis history, budget signals, and feedback
-5. **Copy important summaries deliberately**: Description writeback is not implemented; make any Trello change consciously
+5. **Make Trello changes deliberately**: Comment posts and description replacement require review, an approval checkbox, and a final confirmation.
 
 ## 🆘 Support
 

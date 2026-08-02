@@ -215,7 +215,7 @@ async function callOpenAI(payload, env) {
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
-      max_tokens: payload.maxOutputTokens
+      max_completion_tokens: payload.maxOutputTokens
     })
   });
   const data = await parseProviderJson(response);
@@ -226,7 +226,8 @@ async function callOpenAI(payload, env) {
     provider: "OpenAI via proxy",
     model,
     tokens: data.usage ? data.usage.total_tokens : 0,
-    cost: estimateOpenAICost(model, data.usage)
+    cost: null,
+    costEstimated: false
   });
 }
 
@@ -255,7 +256,8 @@ async function callGoogle(payload, env) {
     provider: "Google AI via proxy",
     model,
     tokens: data.usageMetadata ? data.usageMetadata.totalTokenCount : 0,
-    cost: 0
+    cost: null,
+    costEstimated: false
   });
 }
 
@@ -281,7 +283,8 @@ async function callAnthropic(payload, env) {
     provider: "Anthropic via proxy",
     model,
     tokens: data.usage ? (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0) : 0,
-    cost: 0
+    cost: null,
+    costEstimated: false
   });
 }
 
@@ -303,7 +306,8 @@ function proxyResult(content, metadata) {
       provider: metadata.provider,
       model: metadata.model,
       tokens: Math.max(0, Number(metadata.tokens) || 0),
-      cost: Math.max(0, Number(metadata.cost) || 0)
+      cost: metadata.costEstimated === true ? Math.max(0, Number(metadata.cost) || 0) : null,
+      costEstimated: metadata.costEstimated === true
     }
   };
 }
@@ -411,16 +415,6 @@ function pruneRateLimitBuckets(now) {
       rateLimitBuckets.delete(key);
     }
   }
-}
-
-function estimateOpenAICost(model, usage) {
-  if (!usage) return 0;
-  const rates = {
-    "gpt-4o": { input: 0.005 / 1000, output: 0.015 / 1000 },
-    "gpt-4o-mini": { input: 0.00015 / 1000, output: 0.0006 / 1000 }
-  };
-  const rate = rates[model] || rates["gpt-4o-mini"];
-  return Number((((usage.prompt_tokens || 0) * rate.input) + ((usage.completion_tokens || 0) * rate.output)).toFixed(6));
 }
 
 function sanitizeErrorMessage(value) {

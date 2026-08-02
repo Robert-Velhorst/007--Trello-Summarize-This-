@@ -92,7 +92,7 @@
 
 **Documentation updated:** CODEX_WORKLOG, CODEX_CHECKPOINTS, FINAL_VERIFICATION_REPORT
 
-**What remains:** Product-scope blockers and partials remain unchanged: external approvals/credentials, persistent production storage, binary extraction gaps, Trello description writeback, and measured accuracy evidence.
+**What remains:** Product-scope blockers and partials remain unchanged: external approvals/credentials, persistent production storage, binary extraction gaps, live Trello verification of description replacement, and measured accuracy evidence.
 
 ---
 
@@ -110,7 +110,7 @@
 
 **Why it matters:** This reduces false-completion risk from outdated top-level documents that still used broad deployment or production wording.
 
-**What remains:** Product-scope blockers and partials remain unchanged: external approvals/credentials, persistent production storage, binary extraction gaps, Trello description writeback, and measured accuracy evidence.
+**What remains:** Product-scope blockers and partials remain unchanged: external approvals/credentials, persistent production storage, binary extraction gaps, live Trello verification of description replacement, and measured accuracy evidence.
 
 ---
 
