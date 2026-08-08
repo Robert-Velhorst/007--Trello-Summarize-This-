@@ -1,5 +1,15 @@
 # Codex Worklog
 
+## 2026-08-08 — Giant Prompt Implementation Pass
+
+- Consolidated the latest maintained Power-Up, backend hardening, description-writeback, evaluation, and V3 launcher work on `agent/implement-giant-goal`.
+- Replaced the old external-blocker assumptions for phases 016, 022, 027, 032, 033, 042, 052-056, 106, and 109 with local implementations and tests.
+- Added schema migrations, workspaces/RBAC, durable reviewed jobs, integrated scheduler, retries/leases, reminders, in-app notifications, search/filter/sort/pagination, local analytics, verified backup/restore, reconciliation, exception aggregation, and a redacted support bundle.
+- Added async scrypt, timing-safe admin checks, body-buffer limits, privacy-safe exports/deletion, bounded retention, transactional worker persistence, and an exclusive runtime lock.
+- Added Docker/Compose artifacts, expanded CI, rebuilt the Windows installer, and added operations, E2E, and 5,000-user tests.
+- Corrected phase 054 to `Data reconciliation and repair commands` and moved genuine owner/live-service requirements into the external gates register.
+- Earlier entries saying backups, workers, or local batch execution were unavailable are historical and superseded by this section. Payments and unapproved/external writes remain fail-closed.
+
 ## 2026-07-10
 
 - Audited the repo against the July 3, 2026 goal prompt.

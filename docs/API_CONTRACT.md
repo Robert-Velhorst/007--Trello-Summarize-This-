@@ -1,6 +1,6 @@
 # API Contract and Error Envelope
 
-Date: 2026-07-23 (Phase 009)
+Date: 2026-08-08
 
 ## Response Envelope
 
@@ -27,7 +27,7 @@ All backend JSON responses follow a consistent envelope:
 |---|---|
 | 200 | Success |
 | 201 | Created |
-| 202 | Accepted (async/stub) |
+| 202 | Accepted for durable worker processing |
 | 204 | No content (OPTIONS preflight) |
 | 400 | Bad request (validation error) |
 | 401 | Unauthorized (missing/invalid token) |
@@ -60,23 +60,32 @@ POST /api/auth/login    { email, password }        → 200 { success, user, toke
 Authentication and registration attempts are throttled by both normalized email and direct socket client address before password verification. A throttled request returns `429` with `retryAfterSeconds`; the local limits are documented in `docs/RATE_LIMIT_POLICY.md`.
 
 Registration requires a valid email address. Admin user updates reject malformed email addresses (`400`) and duplicate addresses (`409`).
+Registration passwords contain 12-256 characters and are hashed with asynchronous scrypt. Login performs equivalent password work for unknown users to reduce timing-based identity discovery.
 User roles are not editable through the admin user-update route (`422`); admin authority comes only from the separate admin session login.
 
 ### User
 ```
 GET  /api/user/profile  → 200 { success, user }
+GET  /api/user/data-export → 200 { success, data }
+DELETE /api/user/profile { password } → 200 { success, removed }
 GET  /api/user/credits  → 200 { success, credits }
 GET  /api/user/activity → 200 { success, activity }
 POST /api/summarize { text } → 200 { success, summary, creditsUsed, remaining }
 ```
 
+When `billingMode` is disabled, deterministic local summaries use zero credits. Payment endpoints remain disabled and cannot grant credits from unverified client input.
+
 ## Error Sanitization
 
 Malformed JSON bodies return `400`; bodies larger than the backend limit return `413`. These expected client errors do not create a high-severity runtime alert. Unexpected server failures return only `500 { success: false, error: "Internal server error" }`; their detailed message is retained in the local high-severity alert record rather than sent to the caller.
 
-### Reviewed Batch Ledger
+### Reviewed Batch And Local Worker
 
-The batch API is a private ledger for observed popup workflow results, not a server-side execution engine. Job terminal states are derived from recorded card outcomes and cannot be set directly. Card updates accept only recognized reviewed-workflow states; an `analyzed` state requires an observed result object, and `blocked`/`failed` states require an observed error reason. Invalid or fabricated-looking state updates return `422`.
+Manual jobs remain a private ledger for observed popup results. A job can use `executionMode: "local-worker"` only with `executionApproved: true` and at least 50 characters of explicit text per card. `POST /run` enqueues that bounded job; the worker never fetches Trello or calls a provider and successful cards stop at `review-required`. Terminal states remain derived from card outcomes. Invalid or fabricated-looking state updates return `422`.
+
+### Workspace, Reminder, And Operations APIs
+
+Workspace routes enforce owner/editor/viewer memberships. Owners manage names and membership; members can read shared workspace summaries. Reminder routes create durable in-app notifications. Admin operations expose verified backup/restore, dry-run/apply reconciliation, exception aggregation, and a content/credential-redacted support bundle. Searchable list routes accept bounded `q`, `status`, `sort`, `limit`, and `offset` parameters.
 
 All error messages shown to users pass through `sanitizeErrorMessage()` before display. This strips:
 - Bearer tokens, API keys (`sk-*`, `Bearer *`, `api_key=*`)

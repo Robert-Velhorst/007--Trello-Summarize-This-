@@ -1,18 +1,16 @@
-# Roadmap And Blocked Items
+# Roadmap And External Gates
 
-Date: 2026-07-12
+Date: 2026-08-08
 
-## Next Recommended Milestones
+## Highest-Value Next Work
 
-1. Decide the v1 attachment boundary:
-   - keep binary attachments metadata-only, or
-   - implement real PDF text extraction first
-2. Either repair or archive the disconnected backend/admin subsystem
-3. Add automated browser-level verification for live popup behavior
-4. Introduce a one-command local run path if the project is meant to remain actively developed
+1. Deploy the static Power-Up to an owner-controlled HTTPS origin and repeat comment/description acceptance tests on expendable Trello cards.
+2. Collect a representative, independently labeled card set and run the checked-in evaluation harness; do not turn heuristic confidence into an accuracy claim.
+3. Decide whether browser-dependent PDF/Office/OCR extraction should be shipped or whether metadata-only remains the privacy boundary.
+4. If multiple backend instances are needed, migrate the local JSON state to a managed database and queue while retaining workspace ownership, idempotency, leases, repair, and audit semantics.
+5. Configure encrypted offsite backups and perform a live restore drill before treating the backend as production operations.
+6. Enable payments only if there is a verified commercial need and signature/reconciliation/refund/legal work is complete. Local mode intentionally works without billing.
 
-## Blocked Items
+## External Gates
 
-- Full provider-operational verification depends on real credentials and deployed endpoints
-- Full backend/admin completion depends on dependency restoration, runtime setup, and product-scope confirmation
-- Production-readiness claims beyond the static Power-Up are blocked until the inactive backend/admin layer is either restored or removed from scope
+Provider credentials, public hosting, Trello listing approval, live writeback verification, representative labeled data, production infrastructure, and payment-provider activation remain owner/external actions. Exact evidence and requirements are maintained in `BLOCKED_PHASES.md`.

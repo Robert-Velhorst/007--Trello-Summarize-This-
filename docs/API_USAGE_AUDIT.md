@@ -38,7 +38,7 @@ Previous: 2026-07-10
 
 | Call | Location | Status | Notes |
 |---|---|---|---|
-| `fetch(updateManifestUrl, { credentials: "omit", referrerPolicy: "no-referrer" })` | popup.html | Active (manual trigger only) | Only from `raw.githubusercontent.com/Noodzakelijk-Online/...` |
+| `fetch(updateManifestUrl, { credentials: "omit", referrerPolicy: "no-referrer" })` | popup.html | Active (manual trigger only) | Only from `raw.githubusercontent.com/Robert-Velhorst/...` |
 
 ### Trello REST API
 
@@ -59,6 +59,8 @@ All endpoints live in `backend-app.js`. The backend uses a local JSON runtime st
 | `/api/auth/register` | POST | None | Active | User registration |
 | `/api/auth/login` | POST | None | Active | User login → token |
 | `/api/user/profile` | GET | Bearer | Active | User profile |
+| `/api/user/profile` | DELETE | Bearer + current password | Active | Cascades owner data deletion and sessions |
+| `/api/user/data-export` | GET | Bearer | Active | Owner data export excluding password hashes and sessions |
 | `/api/user/credits` | GET | Bearer | Active | Credit balance |
 | `/api/user/activity` | GET | Bearer | Active | Recent events bearing the requesting user's ID only; global/system events are not exposed |
 | `/api/summarize` | POST | Bearer | Active (local only) | Produces a deterministic excerpt with explicit facts, inferences, uncertainty, and unsupported-claim fields; provider/proxy execution is rejected |
@@ -66,7 +68,17 @@ All endpoints live in `backend-app.js`. The backend uses a local JSON runtime st
 | `/api/webhooks/stripe` | POST | None | Disabled (503) | Never accepts a webhook because signature verification and payment reconciliation are not implemented |
 | `/api/batch/jobs` | POST/GET | Bearer | Active | Private persistence ledger for the reviewed popup batch workflow |
 | `/api/batch/jobs/:id/start`, `/status`, `/cards/:cardId` | POST | Bearer | Active | Records actual client-side reviewed workflow status and results; ownership, recognized states, terminal-state immutability, and result/error evidence rules are enforced |
-| `/api/batch/jobs/:id/run` | POST | Bearer | Disabled (409) | Never fabricates analysis or completion; directs callers to the reviewed Power-Up workflow |
+| `/api/batch/jobs/:id/run` | POST | Bearer | Active (gated) | Enqueues only explicitly approved local-worker jobs with explicit text; all other jobs return 409 |
+| `/api/workspaces` | GET | Bearer | Active | Lists requesting user's memberships |
+| `/api/workspaces/:id` | PUT | Owner | Active | Updates bounded workspace settings |
+| `/api/workspaces/:id/members` | GET/POST | Member/Owner | Active | Lists members or adds/updates a registered user |
+| `/api/workspaces/:id/members/:userId` | DELETE | Owner | Active | Removes non-owner membership |
+| `/api/workspaces/:id/summaries` | GET | Member | Active | Shared workspace summary reads |
+| `/api/reminders` | GET/POST | Bearer | Active | Durable in-app reminders |
+| `/api/reminders/:id` | DELETE | Owner | Active | Cancels owner reminder |
+| `/api/notifications` | GET | Bearer | Active | Owner-scoped in-app notifications |
+| `/api/notifications/:id/read` | POST | Owner | Active | Marks owner notification read |
+| `/api/analytics/events` | POST | Bearer | Active | Allowlisted content-free local event only |
 | `/api/admin/auth/login` | POST | None | Active | Admin login |
 | `/api/admin/auth/logout` | POST | Admin | Active | Admin logout |
 | `/api/admin/auth/refresh` | POST | Admin | Active | Token refresh |
@@ -96,9 +108,12 @@ All endpoints live in `backend-app.js`. The backend uses a local JSON runtime st
 | `/api/admin/system/services/:service/restart` | POST | Admin | Disabled (503) | Never claims a restart because no verified service-control integration exists |
 | `/api/admin/reports` | GET | Admin | Active | Reports list |
 | `/api/admin/reports/generate` | POST | Admin | Active | Generate report |
-| `/api/admin/backup/create` | POST | Admin | Disabled (503) | Never claims to create a backup until a restorable snapshot implementation exists |
+| `/api/admin/backup/create` | POST | Admin | Active | Creates schema-validated SHA-256 snapshot with retention |
 | `/api/admin/backup/list` | GET | Admin | Active | List backups |
-| `/api/admin/backup/:id/restore` | POST | Admin | Disabled (503) | Never claims to restore a backup until validated snapshot restoration exists |
+| `/api/admin/backup/:id/restore` | POST | Admin + confirm | Active | Integrity-checks snapshot and creates a pre-restore safety backup |
+| `/api/admin/data/reconcile` | POST | Admin | Active | Dry-run/apply repair with post-apply verification |
+| `/api/admin/exceptions` | GET | Admin | Active | Failed jobs, open alerts, and data issues |
+| `/api/admin/support-bundle` | GET | Admin | Active | Redacted runtime/support evidence |
 | `/api/admin/maintenance/schedule` | POST | Admin | Active | Create a local maintenance-window record |
 | `/api/admin/maintenance/windows` | GET | Admin | Active | List local maintenance-window records |
 | `/api/admin/files/upload` | POST | Admin | Not implemented (404) | No backend upload endpoint is exposed |

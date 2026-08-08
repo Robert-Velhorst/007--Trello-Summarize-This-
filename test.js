@@ -32,7 +32,11 @@ const CustomPromptManager = require("./custom-prompts");
   "docs/OPERATOR_RUNBOOK.md",
   "docs/CODEX_WORKLOG.md",
   "docs/CODEX_CHECKPOINTS.md",
-  "docs/TASK_GRAPH.md"
+  "docs/TASK_GRAPH.md",
+  "docs/BACKUP_RESTORE.md",
+  "docs/DATA_RECONCILIATION.md",
+  "docs/REQUIREMENTS_TRACEABILITY.md",
+  "docs/WORKER_OPERATIONS.md"
 ].forEach((fileName) => {
   assert.ok(fs.existsSync(path.join(__dirname, fileName)), `${fileName} exists`);
 });
@@ -51,6 +55,8 @@ assert.match(completionMatrixText, /\| Trello description writeback \| Implement
 const trelloConfigText = fs.readFileSync(path.join(__dirname, "trello-config.js"), "utf8");
 assert.match(trelloConfigText, /SummarizeThisTrelloConfig/);
 assert.match(trelloConfigText, /appKey/);
+const trelloSetupText = fs.readFileSync(path.join(__dirname, "trello-setup.html"), "utf8");
+assert.match(trelloSetupText, /githubOwner:\s*"Robert-Velhorst"/);
 
 function readPowerShellStringArray(fileName, variableName) {
   const scriptText = fs.readFileSync(path.join(__dirname, fileName), "utf8");
@@ -83,7 +89,7 @@ assert.match(launcherScriptText, /Join-Path \$RepoRootCandidate "popup\.html"/, 
 const updateManifest = JSON.parse(fs.readFileSync(path.join(__dirname, "update.json"), "utf8"));
 assert.equal(updateManifest.schemaVersion, "summarize-this-update-manifest-v1");
 assert.equal(updateManifest.version, SummarizeThis.APP_VERSION);
-assert.match(updateManifest.manifestUrl, /^https:\/\/raw\.githubusercontent\.com\/Noodzakelijk-Online\/007--Trello-Summarize-This-\//);
+assert.match(updateManifest.manifestUrl, /^https:\/\/raw\.githubusercontent\.com\/Robert-Velhorst\/007--Trello-Summarize-This-\//);
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
 assert.equal(packageJson.main, "index.js");
 assert.equal(packageJson.scripts.start, "node local-dev-server.js");
@@ -486,14 +492,14 @@ assert.equal(SummarizeThis.compareVersions("v1.0.0", "1"), 0);
 assert.equal(SummarizeThis.compareVersions("1.0.0", "1.0.1"), -1);
 const normalizedUpdateManifest = SummarizeThis.normalizeUpdateManifest({
   version: "1.2.3",
-  releaseNotesUrl: "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/releases/tag/v1.2.3",
+  releaseNotesUrl: "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/releases/tag/v1.2.3",
   downloadUrl: "https://evil.example/download.exe",
-  manifestUrl: "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json",
+  manifestUrl: "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json",
   message: "Update available."
 });
 assert.equal(normalizedUpdateManifest.version, "1.2.3");
 assert.equal(normalizedUpdateManifest.downloadUrl, "");
-assert.match(normalizedUpdateManifest.releaseNotesUrl, /github\.com\/Noodzakelijk-Online/);
+assert.match(normalizedUpdateManifest.releaseNotesUrl, /github\.com\/Robert-Velhorst/);
 const availableUpdate = SummarizeThis.evaluateUpdateStatus("1.0.0", normalizedUpdateManifest);
 assert.equal(availableUpdate.updateAvailable, true);
 assert.equal(availableUpdate.upToDate, false);
@@ -1584,7 +1590,7 @@ const adminConfig = TrelloAdminConfig.createAdminConfig({
   icon: { url: "./icon.svg" },
   capabilities: ["card-buttons", "show-settings"]
 }, "https://powerup.example.com/app/");
-assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260719.3");
+assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260808.1");
 assert.equal(adminConfig.manifestUrl, "https://powerup.example.com/app/manifest.json");
 assert.equal(adminConfig.iconUrl, "https://powerup.example.com/app/icon.svg");
 assert.equal(adminConfig.privacyUrl, "https://powerup.example.com/app/privacy.html");
@@ -1592,7 +1598,7 @@ assert.equal(adminConfig.termsUrl, "https://powerup.example.com/app/terms.html")
 assert.deepEqual(adminConfig.capabilities, ["card-buttons", "show-settings"]);
 
 const adminValuesText = TrelloAdminConfig.makeAdminValuesText(adminConfig);
-assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260719.3"));
+assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260808.1"));
 assert.ok(adminValuesText.includes("Manifest URL: https://powerup.example.com/app/manifest.json"));
 assert.ok(adminValuesText.includes("Privacy policy URL: https://powerup.example.com/app/privacy.html"));
 assert.ok(adminValuesText.includes("Terms of service URL: https://powerup.example.com/app/terms.html"));
@@ -1663,7 +1669,7 @@ assert.equal(JSON.stringify(adminSetupPackage).includes("support@example.com"), 
 assert.doesNotMatch(JSON.stringify(adminSetupPackage), /sk-[a-z0-9]/i);
 
 const adminAutofillScript = TrelloAdminConfig.createAdminAutofillScript(adminConfig);
-assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260719.3"));
+assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260808.1"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/manifest.json"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/privacy.html"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/terms.html"));

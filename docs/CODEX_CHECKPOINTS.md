@@ -1,5 +1,13 @@
 # Codex Checkpoints
 
+## Checkpoint — 2026-08-08 Giant Prompt Local Completion
+
+**State:** Repository phases 000-115 have implementation/evidence for the supported local scope. Genuine external gates remain open.
+
+**Verification added:** `operations.test.js`, `e2e.test.js`, `large-dataset.test.js`, full CI matrix, Docker image build, Windows installer build, dependency audit, resource report, runtime doctor, and backend doctor.
+
+**Safety boundary:** Local worker jobs require submitted source text and explicit approval, stop at review-required, and never fetch or write Trello. Billing stays disabled. Public hosting, live writeback acceptance, representative accuracy measurement, multi-instance production infrastructure, offsite DR, and payment activation remain external.
+
 ## Checkpoint 1 — 2026-07-10
 
 **State:** Repository audited. Active surface identified as static Power-Up. Inactive backend files documented. All required audit docs created.

@@ -33,8 +33,23 @@ jobs:
       - name: Run backend contract tests
         run: node backend.test.js
 
+      - name: Run operations and worker tests
+        run: node operations.test.js
+
+      - name: Run end-to-end backend test
+        run: node e2e.test.js
+
+      - name: Run large-dataset pagination test
+        run: node large-dataset.test.js
+
       - name: Run adversarial tests
         run: node adversarial.test.js
+
+      - name: Run labeled evaluation harness
+        run: node evaluation.test.js
+
+      - name: Check resource budget
+        run: node tools/resource-analysis.js
 
       - name: Run doctor diagnostics
         run: node doctor.js
@@ -87,3 +102,30 @@ jobs:
           });
           console.log('No overclaiming found.');
           "
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --tag summarize-this:test .
+
+  windows-installer:
+    name: Windows 11 installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build installer
+        shell: powershell
+        run: .\installer\windows\build-installer.ps1
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SummarizeThisSetup
+          path: dist/windows-installer/SummarizeThisSetup.exe

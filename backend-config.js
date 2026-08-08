@@ -3,6 +3,10 @@ const path = require("node:path");
 const MIN_SESSION_SECRET_LENGTH = 32;
 const MIN_ADMIN_PASSWORD_LENGTH = 12;
 
+function isPlaceholderSecret(value) {
+  return /^(replace-with|change-me|changeme|your-secret|your-admin)/i.test(String(value || "").trim());
+}
+
 function env() {
   return {
     PORT: Number(process.env.API_PORT || process.env.PORT || 8787),
@@ -38,11 +42,11 @@ function isAllowedBackendOrigin(origin) {
 function missingEnvForBackend() {
   const current = env();
   const missing = [];
-  if (String(current.JWT_SECRET).length < MIN_SESSION_SECRET_LENGTH) {
-    missing.push(`JWT_SECRET (minimum ${MIN_SESSION_SECRET_LENGTH} characters)`);
+  if (String(current.JWT_SECRET).length < MIN_SESSION_SECRET_LENGTH || isPlaceholderSecret(current.JWT_SECRET)) {
+    missing.push(`JWT_SECRET (minimum ${MIN_SESSION_SECRET_LENGTH} characters, non-placeholder)`);
   }
-  if (String(current.ADMIN_PASSWORD).length < MIN_ADMIN_PASSWORD_LENGTH) {
-    missing.push(`ADMIN_PASSWORD (minimum ${MIN_ADMIN_PASSWORD_LENGTH} characters)`);
+  if (String(current.ADMIN_PASSWORD).length < MIN_ADMIN_PASSWORD_LENGTH || isPlaceholderSecret(current.ADMIN_PASSWORD)) {
+    missing.push(`ADMIN_PASSWORD (minimum ${MIN_ADMIN_PASSWORD_LENGTH} characters, non-placeholder)`);
   }
   return missing;
 }
@@ -137,6 +141,7 @@ const exported = {
   },
   MIN_SESSION_SECRET_LENGTH,
   MIN_ADMIN_PASSWORD_LENGTH,
+  isPlaceholderSecret,
   missingEnvForBackend,
   backendReadiness,
   powerUpReadiness,

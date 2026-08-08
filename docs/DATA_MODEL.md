@@ -72,7 +72,9 @@ Date: 2026-07-23 (Phase 005)
 {
   id: UUID,
   email: string,
-  passwordHash: string (salted hash in current implementation),
+  passwordHash: string (asynchronous scrypt hash),
+  passwordSalt: string,
+  workspaceId: string,
   name: string,
   role: "user" | "admin",
   credits: number,
@@ -80,6 +82,10 @@ Date: 2026-07-23 (Phase 005)
   createdAt: ISO8601
 }
 ```
+
+### Workspace And Operations
+
+`workspaces` have one owner and `memberships` assign `owner`, `editor`, or `viewer`. Summaries, jobs, reminders, notifications, and local analytics carry `userId` and `workspaceId`. Batch jobs also retain execution mode, explicit approval, retry/lease metadata, and bounded card attempts. Store metadata records schema version and applied migrations.
 
 ## Ownership Model
 
@@ -91,6 +97,7 @@ Date: 2026-07-23 (Phase 005)
 | Export records | Member-private (Trello) | Only the individual Trello member can read/write |
 | Backend users | Local JSON runtime store | Server-side; isolated per session; unsuitable for production deployment |
 | Backend credits | Local JSON runtime store | Per-user; not shared; not payment-provider reconciled |
+| Workspace summaries | Local JSON runtime store | Readable only by current workspace members; membership changes are owner-controlled |
 
 ## Persistence
 
@@ -98,5 +105,6 @@ Date: 2026-07-23 (Phase 005)
 |---|---|---|
 | Settings | Trello member-private storage | Survives browser restarts |
 | Ledger history | Trello member-private storage | Survives browser restarts |
-| Backend state | Local JSON runtime file | Survives a normal process restart; writes are serialized within one backend process and files are owner-only on POSIX hosts, but it is not a production database, backup solution, or multi-instance store |
+| Backend state | Local JSON runtime file | Survives restart; serialized writes plus an exclusive runtime lock prevent multi-process overwrite |
+| Local backups | Private `backups/` directory | SHA-256 verified, schema validated, newest 20 retained; not offsite DR |
 | AI provider keys | Trello member-private storage | Never sent to any server by default |

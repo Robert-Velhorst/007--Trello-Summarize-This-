@@ -293,8 +293,8 @@
     }
   };
   var APP_VERSION = "1.0.4";
-  var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json";
-  var UPDATE_REPO_URL_PREFIX = "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-";
+  var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json";
+  var UPDATE_REPO_URL_PREFIX = "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-";
 
   function boundedNumber(value, fallback, min, max) {
     var number = Number(value);
@@ -337,7 +337,7 @@
         parsed.href.indexOf(UPDATE_REPO_URL_PREFIX) === 0;
       var allowedRawManifest = parsed.protocol === "https:" &&
         parsed.hostname === "raw.githubusercontent.com" &&
-        /^\/Noodzakelijk-Online\/007--Trello-Summarize-This-\//.test(parsed.pathname);
+        /^\/Robert-Velhorst\/007--Trello-Summarize-This-\//.test(parsed.pathname);
 
       return allowedGithub || allowedRawManifest ? parsed.href : fallback || "";
     } catch (_error) {

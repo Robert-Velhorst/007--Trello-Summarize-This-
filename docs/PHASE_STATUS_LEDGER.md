@@ -1,12 +1,12 @@
 # Phase Status Ledger
 
-Date: 2026-07-25 (scope correction)
+Date: 2026-08-08 (giant-prompt implementation pass)
 
 > Scope notice: This ledger records whether a phase has a local implementation or audit artifact. It is **not** a claim that the full product is complete or production-ready. The controlling product-status source is [`GOAL_COMPLETION_MATRIX.md`](GOAL_COMPLETION_MATRIX.md), which records the shipped scope as partial and names missing, disabled, and externally blocked capabilities. Where the two documents differ, the completion matrix and final verification report control.
 
 Status meanings:
 - `Implemented`: a local phase deliverable exists and has the evidence named in the row; this does not imply production readiness or completion of related product capabilities
-- `Blocked`: cannot be completed from repo-only work without external accounts, credentials, or live production infrastructure (see `docs/BLOCKED_PHASES.md`)
+- `Implemented (local scope)`: the repository deliverable is complete, while a named live-service verification remains external
 
 | Phase | Title | Status | Notes |
 |---|---|---|---|
@@ -26,25 +26,25 @@ Status meanings:
 | 013 | Compliance and platform policy boundaries | Implemented | See `docs/COMPLIANCE_BOUNDARIES.md` |
 | 014 | No fake success and no mock production behavior | Implemented | Explicitly distinguishes shipped vs historical/inactive |
 | 015 | Storage, files, uploads, and media safety | Implemented | See `docs/STORAGE_SAFETY.md` |
-| 016 | Background jobs, schedulers, and workers | Blocked | Requires external worker queue (see `docs/BLOCKED_PHASES.md`) |
+| 016 | Background jobs, schedulers, and workers | Implemented | Durable local worker, retries, leases, reminders, single-process integrated scheduler, and exclusive runtime lock |
 | 017 | Idempotency and duplicate action prevention | Implemented | See `docs/IDEMPOTENCY_MODEL.md` |
 | 018 | Rate limits, cooldowns, and provider quotas | Implemented | See `docs/RATE_LIMIT_POLICY.md` |
 | 019 | Audit logging and event history | Implemented | See `docs/AUDIT_LOGGING.md` |
 | 020 | User-facing dashboard and next-action design | Implemented | See `docs/DASHBOARD_DESIGN.md` |
 | 021 | Forms, validation, and autosave behavior | Implemented | See `docs/FORM_VALIDATION.md` |
-| 022 | Search, filters, sorting, and pagination | Blocked | Requires backend DB index (see `docs/BLOCKED_PHASES.md`) |
+| 022 | Search, filters, sorting, and pagination | Implemented | Bounded API query, status filter, sorting, limit, and offset across user/admin collections |
 | 023 | Import and export workflows | Implemented | Copy, JSON download, and comment-draft workflows active |
 | 024 | Templates, presets, and reusable user defaults | Implemented | See `docs/TEMPLATE_DESIGN.md` |
 | 025 | AI/provider abstraction and deterministic fallback | Implemented | Direct, proxy, and local fallback paths exist |
 | 026 | Human review queue and approval gates | Implemented | Review state, feedback, and comment approval gates exist |
-| 027 | Notifications and reminders | Blocked | Requires external email/push service (see `docs/BLOCKED_PHASES.md`) |
+| 027 | Notifications and reminders | Implemented | Durable in-app reminders and notifications; no external email/push claim |
 | 028 | Privacy controls and data deletion | Implemented | See `docs/PRIVACY_UX.md` |
 | 029 | Security headers and web security | Implemented | Hardened in local-dev-server and backend-app |
 | 030 | Secrets management and credential rotation | Implemented | See `docs/SECRETS_MANAGEMENT.md` |
 | 031 | Local development one-command experience | Implemented | `npm run dev` script added (see `docs/LOCAL_DEV_GUIDE.md`) |
-| 032 | Docker and deployment readiness | Blocked | Requires production container host (see `docs/BLOCKED_PHASES.md`) |
-| 033 | Database migrations and rollback safety | Blocked | Requires live DB instance (see `docs/BLOCKED_PHASES.md`) |
-| 034 | CLI and doctor/self-diagnostic command | Implemented | `node doctor.js` (30 checks) |
+| 032 | Docker and deployment readiness | Implemented (local scope) | Hardened non-root image and loopback-only Compose config; live host remains external |
+| 033 | Database migrations and rollback safety | Implemented | Versioned JSON schema migrations plus verified pre-restore snapshots |
+| 034 | CLI and doctor/self-diagnostic command | Implemented | `node doctor.js` (39 checks) plus operations CLI |
 | 035 | Observability, health, and readiness endpoints | Implemented | `/api/health` and `/api/readiness` active |
 | 036 | Admin/operator diagnostics | Implemented | `backend-doctor.js` and admin endpoints active |
 | 037 | Demo mode with explicit labelling | Implemented | See `docs/DEMO_MODE.md` |
@@ -52,8 +52,8 @@ Status meanings:
 | 039 | Test-data factories and fixtures | Implemented | Fixtures in `summarizer-core.js` and test scripts |
 | 040 | Backend test suite | Implemented | `backend.test.js` passing |
 | 041 | Frontend and component test suite | Implemented | Contract tests in `test.js` passing |
-| 042 | Worker/job test suite | Blocked | Requires worker infrastructure (see `docs/BLOCKED_PHASES.md`) |
-| 043 | End-to-end workflow tests | Implemented | Manual runtime protocol documented in `docs/ACCEPTANCE_TESTS.md` |
+| 042 | Worker/job test suite | Implemented | `operations.test.js` covers success, retry, terminal failure, reminders, and locking |
+| 043 | End-to-end workflow tests | Implemented | `e2e.test.js` runs the real HTTP auth/workspace/summary/worker/backup path |
 | 044 | Acceptance test matrix | Implemented | Full matrix in `docs/ACCEPTANCE_TESTS.md` |
 | 045 | Adversarial break-the-app tests | Implemented | `adversarial.test.js` passing (see `docs/ADVERSARIAL_TESTS.md`) |
 | 046 | Cross-user isolation tests | Implemented | `adversarial.test.js` passing (see `docs/CROSS_USER_ISOLATION.md`) |
@@ -62,11 +62,11 @@ Status meanings:
 | 049 | Accessibility review | Implemented | See `docs/ACCESSIBILITY_REVIEW.md` |
 | 050 | Responsive and browser compatibility | Implemented | See `docs/BROWSER_COMPATIBILITY.md` |
 | 051 | Performance baseline and indexing | Implemented | See `docs/PERFORMANCE_BASELINE.md` |
-| 052 | Large dataset and pagination testing | Blocked | Requires DB prepopulated (see `docs/BLOCKED_PHASES.md`) |
-| 053 | Backup and restore procedures | Blocked | Requires cloud bucket (see `docs/BLOCKED_PHASES.md`) |
-| 054 | Incident response and recovery playbook | Blocked | Requires live ops environment (see `docs/BLOCKED_PHASES.md`) |
-| 055 | Product analytics local-first design | Blocked | Requires telemetry ingestion (see `docs/BLOCKED_PHASES.md`) |
-| 056 | SaaS readiness without forced billing | Blocked | Requires Stripe & DB (see `docs/BLOCKED_PHASES.md`) |
+| 052 | Large dataset and pagination testing | Implemented | `large-dataset.test.js` verifies search and pagination across 5,000 users |
+| 053 | Backup and restore procedures | Implemented | SHA-256 verified local snapshots, retention, restore confirmation, and safety backup |
+| 054 | Data reconciliation and repair commands | Implemented | Dry-run/apply reconciliation via API and CLI with post-repair verification |
+| 055 | Product analytics local-first design | Implemented | Allowlisted, content-free local analytics events and aggregate admin metrics |
+| 056 | SaaS readiness without forced billing | Implemented (local scope) | Billing is disabled and local summaries are free; payment routes fail closed |
 | 057 | Internationalization and Dutch/English readiness | Implemented | See `docs/I18N_DESIGN.md` |
 | 058 | Feature flags and rollout controls | Implemented | `feature-flags.js` (see `docs/FEATURE_FLAGS.md`) |
 | 059 | Formal state machines | Implemented | See `docs/STATE_MACHINES.md` |
@@ -111,18 +111,18 @@ Status meanings:
 | 098 | Post-completion maintenance plan | Implemented | See `docs/POST_COMPLETION_MAINTENANCE_PLAN.md` |
 | 099 | Roadmap and blocked items | Implemented | See `docs/ROADMAP_AND_BLOCKED_ITEMS.md` |
 | 100 | Real-provider cleanup and account safety | Implemented | See `docs/REAL_PROVIDER_CLEANUP.md` |
-| 101 | Support/debug bundle design | Implemented | See `docs/SUPPORT_DEBUG_BUNDLE_DESIGN.md` |
+| 101 | Support/debug bundle design | Implemented | Redacted bundle implemented in `backend-support.js` and admin/CLI surfaces |
 | 102 | Data retention and archival policy | Implemented | See `docs/DATA_RETENTION_AND_ARCHIVAL_POLICY.md` |
 | 103 | Migration from prototype to production | Implemented | See `docs/MIGRATION_PLAN.md` |
 | 104 | Operator safety stop and emergency controls | Implemented | See `docs/OPERATOR_SAFETY_STOP.md` |
 | 105 | User onboarding and first-run wizard | Implemented | See `docs/ONBOARDING_WIZARD.md` |
-| 106 | Role-based settings and team permissions | Blocked | Requires IdP & DB (see `docs/BLOCKED_PHASES.md`) |
+| 106 | Role-based settings and team permissions | Implemented | Owner/editor/viewer memberships, owner-only settings/member management, shared read scope |
 | 107 | Quality scoring and confidence display | Implemented | Active popup includes quality score |
 | 108 | Human decision minimization | Implemented | Review workflow minimizes manual overhead |
-| 109 | Exception-based workflow dashboard | Blocked | Requires persistent DB (see `docs/BLOCKED_PHASES.md`) |
+| 109 | Exception-based workflow dashboard | Implemented | Admin exceptions endpoint aggregates failed jobs, open alerts, and data issues |
 | 110 | Safe retries and recovery strategy | Implemented | See `docs/RETRY_RECOVERY.md` |
 | 111 | Ambiguous external action resolution | Implemented | See `docs/AMBIGUOUS_ACTION_RESOLUTION.md` |
 | 112 | Versioning and changelog discipline | Implemented | See `docs/VERSIONING_AND_CHANGELOG_DISCIPLINE.md` |
 | 113 | Regression baseline | Implemented | See `docs/REGRESSION_BASELINE.md` |
 | 114 | Maintenance and refactoring review | Implemented | See `docs/MAINTENANCE_AND_REFACTORING_REVIEW.md` |
-| 115 | Final human-operator readiness test | Implemented (local scope) | Local verification evidence exists; it does not replace required live provider, Trello, deployment, or production-operations verification |
+| 115 | Final human-operator readiness test | Implemented (local scope) | Automated local suites and installer build pass; external gates remain listed in `BLOCKED_PHASES.md` |

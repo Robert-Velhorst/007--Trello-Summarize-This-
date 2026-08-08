@@ -1,9 +1,9 @@
 # Summarize This - Evidence-Backed Trello Card Analysis
 
-[![Confidence](https://img.shields.io/badge/Confidence-Evidence--based-blue)](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)
+[![Confidence](https://img.shields.io/badge/Confidence-Evidence--based-blue)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Trello Power-Up](https://img.shields.io/badge/Trello-Power--Up-0079BF)](https://trello.com/power-ups)
-[![AI Powered](https://img.shields.io/badge/AI-Powered-purple)](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)
+[![AI Powered](https://img.shields.io/badge/AI-Powered-purple)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
 
@@ -106,7 +106,7 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 **Option A: Netlify (Recommended)**
 ```bash
 # Clone the repository
-git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
+git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
 
 # Deploy to Netlify
 cd 007--Trello-Summarize-This-
@@ -313,7 +313,7 @@ Confidence is calculated from available evidence and completeness as a review si
 
 ```bash
 # Clone repository
-git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
+git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
 cd 007--Trello-Summarize-This-
 
 # No build step required - pure HTML/CSS/JS
@@ -416,10 +416,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Final Verification Report](docs/FINAL_VERIFICATION_REPORT.md)
 
 ### Issues
-Found a bug or have a feature request? [Open an issue](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues)
+Found a bug or have a feature request? [Open an issue](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)
 
 ### Community
-- 💬 Discussions: [GitHub Discussions](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/discussions)
+- 💬 Discussions: [GitHub Discussions](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/discussions)
 - 📧 Email: Submit feedback at https://help.manus.im
 
 ---
@@ -431,15 +431,17 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 - Optional configured AI/provider paths
 - Evidence/review signals, private review state, feedback, and exports
 - Explicit claim-boundary display and approval-gated comment posting
+- Durable reviewed local worker, reminders, workspace roles, search/pagination, backups, reconciliation, and redacted support diagnostics
+- Windows 11 installer and hardened single-instance Docker backend artifacts
 
 ### 🚧 Partial or not shipped
 - Binary attachment extraction (PDF, Office, and image OCR)
-- Unattended batch execution and live re-verification of description replacement
+- Live re-verification of description replacement and public deployment
 - Measured accuracy and production performance evidence
 
 ### 📋 External requirements
 - Live provider credentials, public HTTPS hosting, and Trello listing approval
-- Production persistence, backups, operations, and payment integration
+- Multi-instance production database/queue, offsite disaster recovery, managed secrets, and payment integration
 - API for third-party integrations
 - Slack/Teams integration
 - Custom AI model fine-tuning
@@ -449,10 +451,10 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 
 ## 📈 Stats
 
-![GitHub stars](https://img.shields.io/github/stars/Noodzakelijk-Online/007--Trello-Summarize-This-?style=social)
-![GitHub forks](https://img.shields.io/github/forks/Noodzakelijk-Online/007--Trello-Summarize-This-?style=social)
-![GitHub issues](https://img.shields.io/github/issues/Noodzakelijk-Online/007--Trello-Summarize-This-)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/Noodzakelijk-Online/007--Trello-Summarize-This-)
+![GitHub stars](https://img.shields.io/github/stars/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Robert-Velhorst/007--Trello-Summarize-This-)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/Robert-Velhorst/007--Trello-Summarize-This-)
 
 ---
 
@@ -470,7 +472,7 @@ These are illustrative uses, not customer testimonials:
 
 ### Made with ❤️ for better project management
 
-**[Get Started](FINAL_DEPLOYMENT_GUIDE.md)** • **[Documentation](USER_GUIDE.md)** • **[GitHub](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)** • **[Issues](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues)**
+**[Get Started](FINAL_DEPLOYMENT_GUIDE.md)** • **[Documentation](USER_GUIDE.md)** • **[GitHub](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)** • **[Issues](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)**
 
 ---
 

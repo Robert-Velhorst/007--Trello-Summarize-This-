@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      BACKEND_ALLOWED_ORIGINS: ${BACKEND_ALLOWED_ORIGINS:-http://127.0.0.1:17117,http://localhost:17117}
+      TRELLO_APP_KEY: ${TRELLO_APP_KEY:-}
+      RUN_WORKER: "true"
+      WORKER_INTERVAL_MS: ${WORKER_INTERVAL_MS:-5000}
+    volumes:
+      - summarize-this-data:/app/database/runtime
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  summarize-this-data:

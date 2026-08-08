@@ -82,6 +82,7 @@ async function main() {
   const storagePathAlias = path.join(os.tmpdir(), `summarize-this-backend-alias-${Date.now()}.json`);
   const precedencePath = path.join(os.tmpdir(), `summarize-this-backend-precedence-${Date.now()}.json`);
   const databaseUrlPath = path.join(os.tmpdir(), `summarize-this-backend-db-url-${Date.now()}.json`);
+  const environmentStorePath = path.join(os.tmpdir(), `summarize-this-backend-env-store-${Date.now()}.json`);
   const app = await createBackendApp({ filePath });
   const customUserEmail = "custom-file-path@test.example";
   const secondaryUserEmail = "secondary-user@test.example";
@@ -110,6 +111,11 @@ async function main() {
   assert.equal(weakReadiness.ok, false);
   assert.ok(weakReadiness.missing.some((item) => item.startsWith("JWT_SECRET (minimum 32")));
   assert.ok(weakReadiness.missing.some((item) => item.startsWith("ADMIN_PASSWORD (minimum 12")));
+  process.env.JWT_SECRET = "replace-with-at-least-32-random-characters";
+  process.env.ADMIN_PASSWORD = "replace-with-at-least-12-random-characters";
+  const placeholderReadiness = backendConfig.backendReadiness();
+  assert.equal(placeholderReadiness.ok, false);
+  assert.equal(placeholderReadiness.missing.length, 2);
   process.env.JWT_SECRET = validSessionSecret;
   process.env.ADMIN_PASSWORD = validAdminPassword;
   if (process.platform !== "win32") {
@@ -156,6 +162,21 @@ async function main() {
     name: "Invalid Email User"
   });
   assert.equal(invalidRegister.status, 400);
+
+  const weakPasswordRegister = await requestJson(app, "POST", "/api/auth/register", {
+    email: "weak-password@test.example",
+    password: "too-short",
+    name: "Weak Password User"
+  });
+  assert.equal(weakPasswordRegister.status, 400);
+  assert.match(weakPasswordRegister.data.error, /at least 12 characters/i);
+
+  const oversizedBody = await requestJson(app, "POST", "/api/auth/register", undefined, {}, JSON.stringify({
+    email: "oversized@test.example",
+    password: "oversized-password",
+    name: "x".repeat(1024 * 1024)
+  }));
+  assert.equal(oversizedBody.status, 413);
 
   const customRegister = await requestJson(app, "POST", "/api/auth/register", {
     email: customUserEmail,
@@ -650,24 +671,31 @@ async function main() {
     assert.equal(reportDownload.status, 200);
 
     const backup = await requestJson(app, "POST", "/api/admin/backup/create", {
-      type: "full"
+      reason: "contract full backup"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(backup.status, 503);
-    assert.match(backup.data.error, /cannot create and verify a restorable snapshot/i);
+    assert.equal(backup.status, 201);
+    assert.equal(backup.data.backup.verified, true);
+    assert.match(backup.data.backup.sha256, /^[a-f0-9]{64}$/);
 
     const backups = await requestJson(app, "GET", "/api/admin/backup/list", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(backups.status, 200);
-    assert.deepEqual(backups.data.backups, []);
+    assert.ok(backups.data.backups.some((item) => item.id === backup.data.backup.id));
 
     const restoreBackup = await requestJson(app, "POST", "/api/admin/backup/not-a-real-backup/restore", {}, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(restoreBackup.status, 503);
-    assert.match(restoreBackup.data.error, /cannot validate or restore a snapshot/i);
+    assert.equal(restoreBackup.status, 400);
+    assert.match(restoreBackup.data.error, /confirm=true/i);
+
+    const verifiedRestore = await requestJson(app, "POST", `/api/admin/backup/${backup.data.backup.id}/restore`, { confirm: true }, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(verifiedRestore.status, 200);
+    assert.equal(verifiedRestore.data.restored.backup.id, backup.data.backup.id);
 
     const maintenance = await requestJson(app, "POST", "/api/admin/maintenance/schedule", {
       startsAt: "2026-07-20T10:00:00.000Z",
@@ -744,7 +772,7 @@ async function main() {
 
   const aliasRegister = await requestJson(aliasApp, "POST", "/api/auth/register", {
     email: "storage-alias@test.example",
-    password: "alias-pass",
+    password: "alias-password",
     name: "Storage Alias User"
   });
   assert.equal(aliasRegister.status, 201);
@@ -787,6 +815,13 @@ async function main() {
   );
   process.env.DATABASE_URL = "";
   fs.rmSync(databaseUrlPath, { force: true });
+
+  process.env.BACKEND_STORE_PATH = environmentStorePath;
+  const environmentStoreApp = await createBackendApp();
+  assert.equal(environmentStoreApp.store.filePath, environmentStorePath);
+  assert.equal(fs.existsSync(environmentStorePath), true);
+  delete process.env.BACKEND_STORE_PATH;
+  fs.rmSync(environmentStorePath, { force: true });
 
   console.log("Backend contract tests passed.");
 }

@@ -38,7 +38,7 @@ Ignored/not active: `DATABASE_URL`, `STRIPE_SECRET_KEY`; optional for the local 
 ## Doctor Commands
 
 ```bash
-npm run doctor           # Verifies 30 checks including file existence, module loading, Node.js version
+npm run doctor           # Verifies required files, operations routes, module loading, and Node.js version
 npm run doctor:backend   # Verifies env vars, proxy shape, Trello key presence
 ```
 

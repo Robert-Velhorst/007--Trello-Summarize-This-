@@ -1,6 +1,6 @@
 # Technical Audit
 
-Date: 2026-07-23 (Phase 115 update)
+Date: 2026-08-08 (giant-prompt implementation pass)
 Previous: 2026-07-10
 
 ## Active Product Surface
@@ -18,7 +18,9 @@ The current shipped product is the static Trello Power-Up flow built around:
 - `proxy/cloudflare-worker.mjs` — Optional Cloudflare Worker proxy for AI calls.
 - `local-dev-server.js` — Static file server for local development. Hardened with CORS, security headers, and graceful shutdown in Phase 115.
 - `index.js` - Compatibility entry point for `node .`; delegates to the same lightweight local server as `npm start`.
-- `backend-app.js` / `backend-server.js` / `backend-config.js` — Backend API with a local JSON runtime store, user auth, admin panel, credit system, and summarize endpoint. Hardened with security headers and CORS in Phase 115.
+- `backend-app.js`, `backend-storage.js`, `backend-server.js`, `backend-worker.js`, and `backend-lock.js` — Single-instance local backend with async-scrypt auth, workspaces, reviewed jobs, reminders, migrations, backups, repair, diagnostics, and an integrated worker.
+- `backend-cli.js` — Lock-safe offline status, migration, backup, restore, reconciliation, support, and worker commands.
+- `Dockerfile` / `docker-compose.yml` — Non-root loopback-bound container path with persistent local storage and health check.
 
 This surface supports:
 - Card analysis with evidence and validation display
@@ -29,12 +31,13 @@ This surface supports:
 - Batch analysis plan generation (manual-first)
 - Budget tracking and cost records
 - Runtime timing records
+- Durable review-required local jobs, reminders, workspace roles, backup/restore, reconciliation, and redacted support diagnostics
 
 ## Phase 115 Verification Results
 
 - `node test.js` — **PASSED** (2335 lines of contract-style assertions)
 - `node backend.test.js` — **PASSED**
-- `node doctor.js` — **PASSED** (30 checks including core module loading, Node.js version, docs existence)
+- `node doctor.js` — **PASSED** (39 checks including operations files/routes, core modules, Node.js, and docs)
 - Core modules load successfully: summarizer-core, card-intelligence-ledger, attachment-processor, ai-providers, trello-integration
 
 ## Verified Current Strengths
@@ -47,15 +50,16 @@ This surface supports:
 - Review, feedback, export history, and ledger history are stored privately rather than written into shared card fields by default.
 - Local dev server now includes security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy) and graceful shutdown.
 - Backend API now includes security headers and CORS preflight handling.
+- Local backend operations are covered by schema-migration, worker/retry, HTTP end-to-end, and 5,000-user pagination tests.
 
 ## Partial Areas
 
 - PDF, Word, Excel, and image OCR extraction are partial only. The repo contains framework code and legacy stubs, but the shipped Power-Up treats these as metadata-only.
-- Batch support is manual-first. The popup prepares reviewed queues and handoff material, but does not perform unattended full-card batch execution.
+- Batch work supports an explicitly approved local worker only when source text is submitted. It intentionally stops at review-required and does not fetch or write Trello.
 - Proxy mode is implemented as an optional path, but requires external deployment and credentials.
-- Backend/admin subsystem exists and is functional with a local JSON runtime store, but is not verified as production-grade. User passwords use salted hashes; no production database or production-grade authentication system exists.
+- Backend/admin subsystem is operational for a single-instance local deployment, but is not verified as internet-facing production infrastructure. Scale-out still requires a production database, queue, TLS, managed secrets, and monitoring.
 - `DATABASE_URL` does not activate a PostgreSQL backend. The backend explicitly supports only the local JSON store and rejects an explicit non-local store request, avoiding a false persistence claim.
-- Local JSON persistence serializes writes inside one backend process to avoid temporary-file collisions, but it remains unsuitable for multi-instance deployment or production database guarantees.
+- Local JSON persistence serializes writes and uses an exclusive runtime lock; a second process fails closed instead of risking overwrite. It remains intentionally unsuitable for multi-instance deployment.
 
 ## Inactive Or Disconnected Areas
 

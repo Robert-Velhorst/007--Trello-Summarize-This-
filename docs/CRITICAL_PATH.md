@@ -1,6 +1,6 @@
 # Critical Path
 
-Date: 2026-07-23 (Phase 115 update)
+Date: 2026-08-08
 Previous: 2026-07-10
 
 ## Active Critical Path
@@ -54,14 +54,18 @@ The current critical path for the shipped Power-Up is:
 - `trello-integration.js`
 - `trello-config.js`
 
-## Phase 115 Smoke-Test Outcome
+## Smoke-Test Outcome
 
 The local repo can verify the shared logic and popup contract text through `npm test`.
 
-Automated verification on 2026-07-23:
+Automated verification on 2026-08-08:
 - `node test.js` — PASSED (2335 lines, all assertions green)
 - `node backend.test.js` — PASSED
-- `node doctor.js` — PASSED (30 checks)
+- `node operations.test.js` — PASSED
+- `node e2e.test.js` — PASSED
+- `node large-dataset.test.js` — PASSED (5,000 users)
+- `node adversarial.test.js` and `node evaluation.test.js` — PASSED
+- `node doctor.js` — PASSED (39 checks)
 - Core module loading — PASSED (summarizer-core, card-intelligence-ledger, attachment-processor, ai-providers, trello-integration)
 
 The Trello-runtime portions still require manual verification:

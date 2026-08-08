@@ -1,10 +1,12 @@
 # Resource Usage Analysis
 
-Date: 2026-07-01
+Date: 2026-08-08
 
 ## Summary
 
 The active Trello Power-Up is already lightweight because it is a static browser app. The biggest resource risk was not CPU or memory, but unbounded AI request size on very large cards and unnecessary static surface area in a Windows install. Both were reduced without removing user-facing features.
+
+The optional backend remains single-instance and dependency-free. Its worker runs inside the backend process, sleeps between bounded cycles, and makes no provider or Trello request. Worker reminder/event changes are committed in one store transaction per cycle, password hashing uses asynchronous scrypt, sessions and operational collections are bounded, and local backups retain the newest 20 snapshots.
 
 ## Measured Footprint
 
@@ -14,13 +16,14 @@ Measured with:
 npm run analyze:resources
 ```
 
-Current results:
+Current 2026-08-08 results:
 
-- Active popup initial local files: about 401.6 KB (`popup.html`, `attachment-processor.js`, `summarizer-core.js`, `card-intelligence-ledger.js`, `icon.svg`).
-- Windows installer runtime payload: about 577.1 KB.
-- Whole repository source footprint, excluding `.git` and `dist`: about 1.87 MB.
-- Generated Windows installer executable: 347,648 bytes.
-- Large-card AI prompt after caps: 19,446 characters.
+- Active popup initial local files: 439.4 KB.
+- Deferred attachment processor: 40.2 KB.
+- Windows installer runtime payload: 610.0 KB.
+- Whole repository source footprint, excluding `.git` and `dist`: 2.67 MB.
+- Generated Windows installer executable: 357,888 bytes.
+- Large-card AI prompt after caps: 19,701 characters.
 - Large-card prompt comments included: 12.
 - Longest included comment: 700 characters.
 - Included card description: 2,499 characters.
@@ -65,9 +68,10 @@ Current results:
    - Dutch local-fallback output uses static in-bundle copy only, adding no network calls, provider calls, storage writes, polling, or runtime translation dependency.
    - The Windows update checker is manual-only. It adds a small local manifest plus static comparison helpers, and performs no network call unless the user presses **Check for updates**.
 
-5. No always-on service:
+5. No always-on installed service:
    - The installed app starts only when the user launches it.
    - Closing the launcher window stops the local server.
+   - The optional backend worker runs only when the operator starts the backend with `RUN_WORKER=true`; it does not ship as a Windows background service.
 
 6. Lightweight ledger:
    - The card intelligence ledger runs in the popup only when an analysis is created.
@@ -124,7 +128,7 @@ Low. The active popup loads a small static HTML page and three shared JS helpers
 
 ### Disk
 
-Low for installed users. The installer runtime payload is about 559.9 KB, and the generated `SummarizeThisSetup.exe` is 338,432 bytes because the payload is compressed into a self-extracting .NET Framework executable.
+Low for installed users. The installer runtime payload is 610.0 KB, and the generated `SummarizeThisSetup.exe` is 357,888 bytes because the payload is compressed into a self-extracting .NET Framework executable.
 
 ### Network
 
