@@ -2209,6 +2209,36 @@ async function runAsyncTests() {
     assert.equal(failedProxyResponse.status, 500);
     assert.equal(failedProxyBody.error, "AI proxy request failed.");
     assert.doesNotMatch(JSON.stringify(failedProxyBody), /internal-provider-secret|private\/proxy/);
+
+    global.fetch = async function () {
+      return new Response(JSON.stringify({
+        error: { message: "provider-secret at /srv/private/provider.js" }
+      }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+    const rejectedProxyResponse = await ProxyWorker.handleRequest(new Request("https://proxy.example.test/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Origin": "https://powerup.example"
+      },
+      body: JSON.stringify({
+        schemaVersion: "summarize-this-ai-proxy-request-v1",
+        provider: "openai",
+        prompt: "Return JSON."
+      })
+    }), {
+      ALLOWED_ORIGINS: "https://powerup.example",
+      OPENAI_API_KEY: "sk-proxy-secret-openai"
+    }, {
+      waitUntil() {}
+    });
+    const rejectedProxyBody = await rejectedProxyResponse.json();
+    assert.equal(rejectedProxyResponse.status, 401);
+    assert.equal(rejectedProxyBody.error, "AI provider authorization failed.");
+    assert.doesNotMatch(JSON.stringify(rejectedProxyBody), /provider-secret|private\/provider/);
   } finally {
     global.fetch = originalProxyFetch;
   }
