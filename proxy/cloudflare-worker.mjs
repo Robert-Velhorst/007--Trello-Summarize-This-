@@ -58,12 +58,10 @@ export async function handleRequest(request, env, ctx) {
   } catch (error) {
     const requestedStatus = Number(error && error.status);
     const status = requestedStatus >= 400 && requestedStatus < 500 ? requestedStatus : 500;
-    const internalMessage = sanitizeErrorMessage(error && error.message ? error.message : String(error));
-    const publicMessage = status === 500 ? "AI proxy request failed." : internalMessage;
     if (ctx && typeof ctx.waitUntil === "function") {
       ctx.waitUntil(logProxyError(status));
     }
-    return jsonResponse({ error: publicMessage }, status, allowedOrigin, rateLimit.headers);
+    return jsonResponse({ error: publicProxyErrorMessage(status) }, status, allowedOrigin, rateLimit.headers);
   }
 }
 
@@ -419,14 +417,21 @@ function pruneRateLimitBuckets(now) {
   }
 }
 
-function sanitizeErrorMessage(value) {
-  return String(value || "Proxy request failed.")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted key]")
-    .replace(/AIza[0-9A-Za-z_-]{8,}/g, "[redacted key]")
-    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
-    .replace(/https?:\/\/[^\s)]+/gi, "[redacted url]")
-    .replace(/\b(api[_-]?key|token|secret)\s*[=:]\s*[^\s,;]+/gi, "$1=[redacted]")
-    .slice(0, 240);
+function publicProxyErrorMessage(status) {
+  const messages = {
+    400: "Proxy request was invalid.",
+    401: "AI provider authorization failed.",
+    402: "AI provider billing authorization failed.",
+    403: "AI provider denied the request.",
+    404: "AI provider endpoint was not found.",
+    408: "AI provider request timed out.",
+    409: "AI provider rejected the request state.",
+    413: "Proxy request body is too large.",
+    415: "Proxy request must use JSON.",
+    422: "AI provider could not process the request.",
+    429: "AI provider rate limit reached. Try again shortly."
+  };
+  return messages[status] || "AI proxy request failed.";
 }
 
 function httpError(status, message) {

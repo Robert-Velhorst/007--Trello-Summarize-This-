@@ -1166,6 +1166,7 @@
         "summarizeThisTrelloCommentAttempts",
         "summarizeThisTrelloDescriptionAttempts"
       ]);
+      var localPreviewPrivateState = new Map();
       var lastCardData = null;
       var lastAnalysis = null;
       var lastLedgerRun = null;
@@ -1683,8 +1684,12 @@
             safeLocalSettings.proxy = SummarizeThis.normalizeProxySettings(safeLocalSettings.proxy);
             safeLocalSettings.backend = normalizeBackendForRuntime(safeLocalSettings.backend, safeLocalSettings.proxy);
             safeLocalSettings.exportPreferences = SummarizeThis.normalizeExportPreferences(safeLocalSettings.exportPreferences || safeLocalSettings);
-            if (localSettings.apiKeys && Object.keys(localSettings.apiKeys).length) {
-              localStorage.setItem("summarizeThisSettings", JSON.stringify(safeLocalSettings));
+            if (Object.prototype.hasOwnProperty.call(localSettings, "apiKeys") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "backendSessionToken") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "password") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "token") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "secret")) {
+              localStorage.removeItem("summarizeThisSettings");
             }
             localSettings = safeLocalSettings;
             var localPromptProfile = SummarizeThis.normalizePromptTemplateSettings(localSettings);
@@ -4855,8 +4860,13 @@
               return sessionValue ? JSON.parse(sessionValue) : fallback;
             }
             if (!localPreviewStorageKeys.has(key)) return fallback;
-            var localValue = localStorage.getItem(key);
-            return localValue ? JSON.parse(localValue) : fallback;
+            var previewSessionValue = localPreviewPrivateState.get(key);
+            if (previewSessionValue) return JSON.parse(previewSessionValue);
+            var legacyLocalValue = localStorage.getItem(key);
+            if (!legacyLocalValue) return fallback;
+            localStorage.removeItem(key);
+            localPreviewPrivateState.set(key, legacyLocalValue);
+            return JSON.parse(legacyLocalValue);
           } catch (error) {
             return fallback;
           }
@@ -4874,7 +4884,7 @@
             return;
           }
           if (!localPreviewStorageKeys.has(key)) return;
-          localStorage.setItem(key, JSON.stringify(value));
+          localPreviewPrivateState.set(key, JSON.stringify(value));
           return;
         }
 

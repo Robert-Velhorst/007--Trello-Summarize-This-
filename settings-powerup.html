@@ -753,8 +753,12 @@
             var safeLocalSettings = SummarizeThis.stripApiKeysForLocalPreview(localSettings);
             safeLocalSettings.proxy = SummarizeThis.normalizeProxySettings(safeLocalSettings.proxy);
             safeLocalSettings.backend = SummarizeThis.normalizeBackendSettings(safeLocalSettings.backend, safeLocalSettings.proxy);
-            if (localSettings.apiKeys && Object.keys(localSettings.apiKeys).length) {
-              localStorage.setItem("summarizeThisSettings", JSON.stringify(safeLocalSettings));
+            if (Object.prototype.hasOwnProperty.call(localSettings, "apiKeys") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "backendSessionToken") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "password") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "token") ||
+                Object.prototype.hasOwnProperty.call(localSettings, "secret")) {
+              localStorage.removeItem("summarizeThisSettings");
             }
             return safeLocalSettings;
           } catch (error) {
@@ -784,7 +788,7 @@
         });
       }
 
-      function buildSettings() {
+      function buildNonCredentialSettings() {
         var promptProfile = SummarizeThis.normalizePromptTemplateSettings({
           customInstructions: fields.customInstructions.value,
           selectedPromptTemplateId: fields.promptTemplateSelect.value,
@@ -833,19 +837,24 @@
               anthropic: fields.anthropicMonthlyLimit.value
             }
           }),
-          apiKeys: {
-            openai: fields.openaiKey.value.trim(),
-            google: fields.googleKey.value.trim(),
-            anthropic: fields.anthropicKey.value.trim()
-          },
           openaiModel: fields.openaiModel.value.trim(),
           googleModel: fields.googleModel.value.trim(),
           anthropicModel: fields.anthropicModel.value.trim(),
           updatedAt: new Date().toISOString()
         };
       }
+
+      function buildApiKeys() {
+        return {
+          openai: fields.openaiKey.value.trim(),
+          google: fields.googleKey.value.trim(),
+          anthropic: fields.anthropicKey.value.trim()
+        };
+      }
+
       async function saveSettings(options) {
-        var settings = buildSettings();
+        var nonCredentialSettings = buildNonCredentialSettings();
+        var settings = Object.assign({}, nonCredentialSettings, { apiKeys: buildApiKeys() });
         var closeAfterSave = !(options && options.keepOpen);
         var successMessage = options && options.successMessage ? options.successMessage : "Settings saved.";
 
@@ -868,8 +877,7 @@
         }
 
         if (!t) {
-          var safePreviewSettings = SummarizeThis.stripApiKeysForLocalPreview(settings);
-          localStorage.setItem("summarizeThisSettings", JSON.stringify(safePreviewSettings));
+          localStorage.setItem("summarizeThisSettings", JSON.stringify(nonCredentialSettings));
           sessionStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(fields.backendSessionToken.value.trim()));
           fields.openaiKey.value = "";
           fields.googleKey.value = "";
