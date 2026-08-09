@@ -870,7 +870,7 @@
         if (!t) {
           var safePreviewSettings = SummarizeThis.stripApiKeysForLocalPreview(settings);
           localStorage.setItem("summarizeThisSettings", JSON.stringify(safePreviewSettings));
-          localStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(fields.backendSessionToken.value.trim()));
+          sessionStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(fields.backendSessionToken.value.trim()));
           fields.openaiKey.value = "";
           fields.googleKey.value = "";
           fields.anthropicKey.value = "";
@@ -917,7 +917,7 @@
       async function readBackendSessionToken() {
         if (!t) {
           try {
-            return JSON.parse(localStorage.getItem("summarizeThisBackendSessionToken") || "\"\"");
+            return JSON.parse(sessionStorage.getItem("summarizeThisBackendSessionToken") || "\"\"");
           } catch (_error) {
             return "";
           }
@@ -930,7 +930,7 @@
       async function writeBackendSessionToken(token) {
         var cleanToken = String(token || "").trim();
         if (!t) {
-          localStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(cleanToken));
+          sessionStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(cleanToken));
           fields.backendSessionToken.value = cleanToken;
           return;
         }

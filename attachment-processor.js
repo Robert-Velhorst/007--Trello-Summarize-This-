@@ -610,24 +610,30 @@ class AttachmentProcessor {
 
     // Extract text from HTML
     extractTextFromHTML(html) {
-        // Remove script and style tags
-        let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-        text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-        
-        // Remove HTML tags
-        text = text.replace(/<[^>]+>/g, ' ');
-        
-        // Decode HTML entities
-        text = text.replace(/&nbsp;/g, ' ');
-        text = text.replace(/&amp;/g, '&');
-        text = text.replace(/&lt;/g, '<');
-        text = text.replace(/&gt;/g, '>');
-        text = text.replace(/&quot;/g, '"');
-        
-        // Clean up whitespace
-        text = text.replace(/\s+/g, ' ').trim();
-        
-        return text;
+        if (typeof DOMParser === 'undefined') return '';
+        const document = new DOMParser().parseFromString(String(html || ''), 'text/html');
+        document.querySelectorAll('script, style, template, noscript').forEach(element => element.remove());
+        const output = [];
+        const blockElements = new Set([
+            'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'fieldset', 'footer',
+            'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main',
+            'nav', 'ol', 'p', 'pre', 'section', 'table', 'tr', 'ul'
+        ]);
+        const visit = node => {
+            if (node.nodeType === 3) {
+                output.push(node.nodeValue || '');
+                return;
+            }
+            if (node.nodeType !== 1) return;
+            const localName = String(node.localName || '').toLowerCase();
+            if (localName === 'br' || blockElements.has(localName)) output.push(' ');
+            Array.from(node.childNodes || []).forEach(visit);
+            if (blockElements.has(localName)) output.push(' ');
+        };
+        Array.from(document.body ? document.body.childNodes : []).forEach(visit);
+        return output.join('')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     extractTextFromPdfBuffer(arrayBuffer) {
@@ -786,15 +792,27 @@ class AttachmentProcessor {
     }
 
     extractWordXmlText(xml) {
-        return String(xml || '')
-            .replace(/<w:tab\/>/g, '\t')
-            .replace(/<w:br\/>/g, '\n')
-            .replace(/<\/w:p>/g, '\n')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
+        if (typeof DOMParser === 'undefined') return '';
+        const document = new DOMParser().parseFromString(String(xml || ''), 'application/xml');
+        if (document.getElementsByTagName('parsererror').length) return '';
+
+        const output = [];
+        const visit = node => {
+            if (node.nodeType === 3) {
+                if (node.parentNode && String(node.parentNode.localName || '').toLowerCase() === 't') {
+                    output.push(node.nodeValue || '');
+                }
+                return;
+            }
+            if (node.nodeType !== 1 && node.nodeType !== 9) return;
+            const localName = String(node.localName || '').toLowerCase();
+            if (localName === 'tab') output.push('\t');
+            if (localName === 'br' || localName === 'cr') output.push('\n');
+            Array.from(node.childNodes || []).forEach(visit);
+            if (localName === 'p') output.push('\n');
+        };
+        visit(document);
+        return output.join('')
             .replace(/\s+\n/g, '\n')
             .replace(/\n{3,}/g, '\n\n')
             .replace(/[ \t]{2,}/g, ' ')

@@ -56,12 +56,14 @@ export async function handleRequest(request, env, ctx) {
     const result = await callProvider(provider, payload, env);
     return jsonResponse(result, 200, allowedOrigin, rateLimit.headers);
   } catch (error) {
-    const status = error && error.status ? error.status : 500;
-    const message = sanitizeErrorMessage(error && error.message ? error.message : String(error));
+    const requestedStatus = Number(error && error.status);
+    const status = requestedStatus >= 400 && requestedStatus < 500 ? requestedStatus : 500;
+    const internalMessage = sanitizeErrorMessage(error && error.message ? error.message : String(error));
+    const publicMessage = status === 500 ? "AI proxy request failed." : internalMessage;
     if (ctx && typeof ctx.waitUntil === "function") {
-      ctx.waitUntil(logProxyError(status, message));
+      ctx.waitUntil(logProxyError(status));
     }
-    return jsonResponse({ error: message }, status, allowedOrigin, rateLimit.headers);
+    return jsonResponse({ error: publicMessage }, status, allowedOrigin, rateLimit.headers);
   }
 }
 
@@ -433,10 +435,10 @@ function httpError(status, message) {
   return error;
 }
 
-async function logProxyError(status, message) {
+async function logProxyError(status) {
   console.warn(JSON.stringify({
     event: "summarize_this_proxy_error",
     status,
-    message
+    category: status >= 500 ? "provider-or-runtime-failure" : "client-request-rejected"
   }));
 }

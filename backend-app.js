@@ -28,7 +28,10 @@ function json(res, status, payload, headers) {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   }, headers || {}));
-  res.end(JSON.stringify(payload));
+  const body = JSON.stringify(payload).replace(/[<>&\u2028\u2029]/g, (character) => {
+    return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+  });
+  res.end(body);
 }
 
 function text(res, status, body) {
@@ -103,12 +106,6 @@ async function verifyPassword(password, record) {
   const candidateBuffer = Buffer.from(candidate.hash, "hex");
   const storedBuffer = Buffer.from(record.hash, "hex");
   return candidateBuffer.length === storedBuffer.length && crypto.timingSafeEqual(candidateBuffer, storedBuffer);
-}
-
-function timingSafeTextEqual(left, right) {
-  const leftHash = crypto.createHash("sha256").update(String(left || "")).digest();
-  const rightHash = crypto.createHash("sha256").update(String(right || "")).digest();
-  return crypto.timingSafeEqual(leftHash, rightHash);
 }
 
 function registrationPasswordError(password) {
@@ -518,7 +515,7 @@ async function updateBatchJob(store, jobId, userId, updater) {
   return clone(job);
 }
 
-async function route(req, res, store) {
+async function route(req, res, store, adminPasswordRecord) {
   const requestUrl = new URL(req.url, `http://${req.headers.host || `${config.HOST}:${config.PORT}`}`);
   const pathname = requestUrl.pathname;
 
@@ -659,7 +656,7 @@ async function route(req, res, store) {
       json(res, 429, { success: false, error: "Too many admin login attempts", retryAfterSeconds: limited.retryAfterSeconds });
       return;
     }
-    if (!timingSafeTextEqual(email, String(config.ADMIN_EMAIL).trim().toLowerCase()) || !timingSafeTextEqual(password, config.ADMIN_PASSWORD)) {
+    if (email !== String(config.ADMIN_EMAIL).trim().toLowerCase() || !await verifyPassword(password, adminPasswordRecord)) {
       json(res, 401, { success: false, error: "Invalid admin credentials" });
       return;
     }
@@ -1985,6 +1982,7 @@ async function createBackendApp(options = {}) {
     databaseUrl: normalizedOptions.databaseUrl,
     postgresTable: normalizedOptions.postgresTable
   });
+  const adminPasswordRecord = await scryptRecord(config.ADMIN_PASSWORD);
 
   const readiness = config.backendReadiness();
   if (!readiness.ok) {
@@ -2020,7 +2018,7 @@ async function createBackendApp(options = {}) {
         return;
       }
       try {
-        await route(req, res, store);
+        await route(req, res, store, adminPasswordRecord);
       } catch (error) {
         const status = Number(error && error.statusCode);
         const clientError = status >= 400 && status < 500;

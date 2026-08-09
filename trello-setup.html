@@ -640,7 +640,7 @@
         var iconUrl = adminConfig.iconUrl;
 
         fields.connectorUrl.value = connectorUrl;
-        fields.testConnectorLink.href = connectorUrl || "#";
+        fields.testConnectorLink.href = safeConnectorHref(connectorUrl);
         fields.adminBookmarkletLink.href = TrelloAdminConfig.createAdminBookmarklet(adminConfig);
         document.getElementById("manifestUrl").textContent = adminConfig.manifestUrl;
         document.getElementById("authorEmail").textContent = adminConfig.authorEmail || "Enter a monitored email above";
@@ -673,6 +673,19 @@
           fields.urlStatusTitle.textContent = "Hosted HTTPS URL required";
           fields.urlStatusText.textContent = validation.message;
         }
+      }
+
+      function safeConnectorHref(value) {
+        try {
+          var parsed = new URL(String(value || ""));
+          var host = parsed.hostname.toLowerCase();
+          var loopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
+          if (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback)) {
+            return parsed.toString();
+          }
+        } catch (_error) {
+        }
+        return "#";
       }
 
       async function checkHostedFiles() {
