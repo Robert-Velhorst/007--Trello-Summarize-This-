@@ -5,6 +5,38 @@ $ErrorActionPreference = "Stop"
 $InstallRoot = Join-Path $env:LOCALAPPDATA "SummarizeThis"
 $StartMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Summarize This"
 $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+$InstalledBackendPidPath = Join-Path $InstallRoot "backend.pid"
+$InstalledBackendExecutable = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot "SummarizeThisBackend.exe"))
+
+function Stop-InstalledBackend {
+  if (-not (Test-Path -LiteralPath $InstalledBackendPidPath -PathType Leaf)) { return }
+
+  $backendPid = 0
+  if (-not [int]::TryParse((Get-Content -LiteralPath $InstalledBackendPidPath -Raw).Trim(), [ref]$backendPid)) {
+    Remove-Item -LiteralPath $InstalledBackendPidPath -Force
+    return
+  }
+
+  $backendProcess = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
+  if (-not $backendProcess) {
+    Remove-Item -LiteralPath $InstalledBackendPidPath -Force
+    return
+  }
+
+  try {
+    $actualExecutable = [System.IO.Path]::GetFullPath($backendProcess.Path)
+  } catch {
+    throw "The running backend process could not be verified safely. Close Summarize This and run the installer again."
+  }
+  if (-not $actualExecutable.Equals($InstalledBackendExecutable, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Remove-Item -LiteralPath $InstalledBackendPidPath -Force
+    return
+  }
+
+  Stop-Process -Id $backendPid -Force
+  $backendProcess.WaitForExit()
+  Remove-Item -LiteralPath $InstalledBackendPidPath -Force -ErrorAction SilentlyContinue
+}
 
 $RuntimeManifestPath = Join-Path $PSScriptRoot "runtime-files.json"
 if (-not (Test-Path -LiteralPath $RuntimeManifestPath -PathType Leaf)) {
@@ -17,6 +49,7 @@ if ($RuntimeFiles.Count -eq 0 -or $RuntimeFiles.Count -ne (@($RuntimeFiles | Sel
   throw "runtime-files.json must contain a non-empty unique file list."
 }
 
+Stop-InstalledBackend
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $StartMenuDir | Out-Null
 
@@ -37,12 +70,34 @@ function New-PrivateRandomText {
   return [Convert]::ToBase64String($buffer).TrimEnd("=").Replace("+", "-").Replace("/", "_")
 }
 
+function Test-CurrentUserOnlyAcl {
+  param(
+    [System.Security.AccessControl.FileSystemSecurity]$Security,
+    [System.Security.Principal.SecurityIdentifier]$CurrentUser,
+    [System.Security.AccessControl.InheritanceFlags]$InheritanceFlags
+  )
+  if (-not $Security.AreAccessRulesProtected) {
+    return $false
+  }
+  $rules = @($Security.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+  return $rules.Count -eq 1 -and
+    $rules[0].IdentityReference -eq $CurrentUser -and
+    $rules[0].AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+    $rules[0].FileSystemRights.HasFlag([System.Security.AccessControl.FileSystemRights]::FullControl) -and
+    $rules[0].InheritanceFlags -eq $InheritanceFlags
+}
+
 function Protect-CurrentUserFile {
   param([string]$Path)
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-  $security = New-Object System.Security.AccessControl.FileSecurity
-  $security.SetOwner($identity.User)
+  $security = Get-Acl -LiteralPath $Path
+  if (Test-CurrentUserOnlyAcl -Security $security -CurrentUser $identity.User -InheritanceFlags ([System.Security.AccessControl.InheritanceFlags]::None)) {
+    return
+  }
   $security.SetAccessRuleProtection($true, $false)
+  foreach ($existingRule in $security.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+    [void]$security.RemoveAccessRuleSpecific($existingRule)
+  }
   $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     $identity.User,
     [System.Security.AccessControl.FileSystemRights]::FullControl,
@@ -52,10 +107,34 @@ function Protect-CurrentUserFile {
   Set-Acl -LiteralPath $Path -AclObject $security
 }
 
+function Protect-CurrentUserDirectory {
+  param([string]$Path)
+  $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+  $security = Get-Acl -LiteralPath $Path
+  $directoryInheritance = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit"
+  if (Test-CurrentUserOnlyAcl -Security $security -CurrentUser $identity.User -InheritanceFlags $directoryInheritance) {
+    return
+  }
+  $security.SetAccessRuleProtection($true, $false)
+  foreach ($existingRule in $security.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+    [void]$security.RemoveAccessRuleSpecific($existingRule)
+  }
+  $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $identity.User,
+    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    $directoryInheritance,
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
+  )
+  $security.AddAccessRule($rule)
+  Set-Acl -LiteralPath $Path -AclObject $security
+}
+
 $BackendSettingsPath = Join-Path $InstallRoot "backend-settings.psd1"
+$dataDirectory = Join-Path $InstallRoot "data"
+New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
+Protect-CurrentUserDirectory -Path $dataDirectory
 if (-not (Test-Path -LiteralPath $BackendSettingsPath -PathType Leaf)) {
-  $dataDirectory = Join-Path $InstallRoot "data"
-  New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
   $localOrigins = 17117..17136 | ForEach-Object { "http://127.0.0.1:$_" }
   $settings = [ordered]@{
     API_HOST = "127.0.0.1"
@@ -77,8 +156,8 @@ if (-not (Test-Path -LiteralPath $BackendSettingsPath -PathType Leaf)) {
   }
   $lines += "}"
   Set-Content -LiteralPath $BackendSettingsPath -Value $lines -Encoding UTF8
-  Protect-CurrentUserFile -Path $BackendSettingsPath
 }
+Protect-CurrentUserFile -Path $BackendSettingsPath
 
 function New-AppShortcut {
   param(

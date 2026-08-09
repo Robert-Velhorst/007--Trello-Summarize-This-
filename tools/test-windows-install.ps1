@@ -12,6 +12,22 @@ $TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("SummarizeThisInstallTe
 $OldLocalAppData = $env:LOCALAPPDATA
 $OldAppData = $env:APPDATA
 $InstallRoot = Join-Path $TestRoot "Local\SummarizeThis"
+$LauncherProcess = $null
+
+function Assert-CurrentUserOnlyAcl {
+  param(
+    [System.Security.AccessControl.FileSystemSecurity]$Acl,
+    [string]$Label
+  )
+  $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+  if (-not $Acl.AreAccessRulesProtected) {
+    throw "$Label still inherits access rules."
+  }
+  $rules = @($Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+  if ($rules.Count -ne 1 -or $rules[0].IdentityReference -ne $currentSid -or $rules[0].AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or -not $rules[0].FileSystemRights.HasFlag([System.Security.AccessControl.FileSystemRights]::FullControl)) {
+    throw "$Label is not restricted to one current-user full-control rule."
+  }
+}
 
 try {
   $env:LOCALAPPDATA = Join-Path $TestRoot "Local"
@@ -37,9 +53,9 @@ try {
   }
 
   $settingsAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1")
-  if (-not $settingsAcl.AreAccessRulesProtected) {
-    throw "The installed private backend settings file still inherits access rules."
-  }
+  Assert-CurrentUserOnlyAcl -Acl $settingsAcl -Label "The installed private backend settings file"
+  $dataAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "data")
+  Assert-CurrentUserOnlyAcl -Acl $dataAcl -Label "The installed private data directory"
 
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch
   if ($LASTEXITCODE -ne 0) { throw "Installed backend launcher returned exit code $LASTEXITCODE." }
@@ -47,6 +63,71 @@ try {
   if ($health.status -ne "ok" -or $health.storage.kind -ne "local") {
     throw "Installed backend health or storage status is invalid."
   }
+
+  $testEmail = "upgrade-test@example.invalid"
+  $testPassword = "upgrade-test-password"
+  $registration = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:18787/api/auth/register" -Body (@{
+    email = $testEmail
+    password = $testPassword
+    name = "Upgrade Test"
+  } | ConvertTo-Json) -TimeoutSec 5
+  if (-not $registration.token) { throw "Installed backend did not create the upgrade persistence account." }
+
+  $settingsBeforeUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1") -Raw
+  $oldBackendPid = [int](Get-Content -LiteralPath (Join-Path $InstallRoot "backend.pid") -Raw)
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Payload "install.ps1") -NoLaunch
+  if ($LASTEXITCODE -ne 0) { throw "Upgrade installer payload returned exit code $LASTEXITCODE." }
+  if (Get-Process -Id $oldBackendPid -ErrorAction SilentlyContinue) {
+    throw "Upgrade installer did not stop the exact installed backend process."
+  }
+  $settingsAfterUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1") -Raw
+  if ($settingsAfterUpgrade -ne $settingsBeforeUpgrade) {
+    throw "Upgrade installer replaced the existing private backend settings."
+  }
+
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch
+  if ($LASTEXITCODE -ne 0) { throw "Upgraded backend launcher returned exit code $LASTEXITCODE." }
+  $signIn = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:18787/api/auth/login" -Body (@{
+    email = $testEmail
+    password = $testPassword
+  } | ConvertTo-Json) -TimeoutSec 5
+  if (-not $signIn.token) { throw "Upgrade did not preserve local backend data." }
+
+  $staticPort = 18137
+  if (Get-NetTCPConnection -State Listen -LocalPort $staticPort -ErrorAction SilentlyContinue) {
+    throw "Static acceptance port $staticPort is already in use."
+  }
+  $LauncherProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $InstallRoot "Start-SummarizeThis.ps1"),
+    "-NoLaunch", "-Port", [string]$staticPort
+  ) -WorkingDirectory $InstallRoot -WindowStyle Hidden -PassThru
+  $staticHealthy = $false
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    Start-Sleep -Milliseconds 250
+    try {
+      $staticHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/__summarize_this_health" -TimeoutSec 1
+      if ($staticHealth.StatusCode -eq 200 -and $staticHealth.Content -eq "ok") {
+        $staticHealthy = $true
+        break
+      }
+    } catch {
+    }
+  }
+  if (-not $staticHealthy) { throw "Installed static launcher did not become healthy." }
+  $popupResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/popup.html?installed=1" -TimeoutSec 3
+  if ($popupResponse.StatusCode -ne 200) { throw "Installed popup was not served." }
+  foreach ($privatePath in @("backend-settings.psd1", "SummarizeThisBackend.exe", "backend.pid", "data/local-backend-store.json", "Start-SummarizeThis.ps1")) {
+    try {
+      $unexpected = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/$privatePath" -TimeoutSec 3
+      throw "Private installer file $privatePath was served with HTTP $($unexpected.StatusCode)."
+    } catch {
+      $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+      if ($statusCode -ne 404) { throw "Private installer file $privatePath did not fail with HTTP 404." }
+    }
+  }
+  Stop-Process -Id $LauncherProcess.Id -Force
+  $LauncherProcess.WaitForExit()
+  $LauncherProcess = $null
 
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "uninstall.ps1")
   if ($LASTEXITCODE -ne 0) { throw "Uninstaller returned exit code $LASTEXITCODE." }
@@ -60,9 +141,15 @@ try {
     InstalledBackend = $health.status
     Storage = $health.storage.kind
     PrivateSettingsAcl = $settingsAcl.AreAccessRulesProtected
+    PrivateDataAcl = $dataAcl.AreAccessRulesProtected
+    UpgradePreservedData = $true
+    PrivateFilesBlocked = $true
     Uninstalled = $true
   }
 } finally {
+  if ($LauncherProcess -and -not $LauncherProcess.HasExited) {
+    Stop-Process -Id $LauncherProcess.Id -Force
+  }
   $pidPath = Join-Path $InstallRoot "backend.pid"
   if (Test-Path -LiteralPath $pidPath -PathType Leaf) {
     $backendPid = 0

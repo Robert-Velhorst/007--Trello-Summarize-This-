@@ -2187,6 +2187,17 @@
     };
   }
 
+  function backendTransportHeaders(apiBase) {
+    try {
+      var host = String(new URL(String(apiBase || "")).hostname || "").toLowerCase();
+      if (host.endsWith(".ngrok-free.app") || host.endsWith(".ngrok-free.dev")) {
+        return { "ngrok-skip-browser-warning": "1" };
+      }
+    } catch (_error) {
+    }
+    return {};
+  }
+
   function stripApiKeysForLocalPreview(settings) {
     var source = settings && typeof settings === "object" ? settings : {};
     return Object.assign({}, source, {
@@ -2431,6 +2442,7 @@
     normalizeProviderMode: normalizeProviderMode,
     normalizeProxySettings: normalizeProxySettings,
     normalizeBackendSettings: normalizeBackendSettings,
+    backendTransportHeaders: backendTransportHeaders,
     normalizePromptTemplates: normalizePromptTemplates,
     normalizePromptTemplateSettings: normalizePromptTemplateSettings,
     normalizeProviderKey: normalizeProviderKey,

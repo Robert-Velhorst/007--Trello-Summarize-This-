@@ -44,9 +44,10 @@ const CustomPromptManager = require("./custom-prompts");
 assert.ok(fs.existsSync(path.join(__dirname, "trello-config.js")), "trello-config.js exists");
 
 const technicalAuditText = fs.readFileSync(path.join(__dirname, "docs/TECHNICAL_AUDIT.md"), "utf8");
-assert.match(technicalAuditText, /static Power-Up flow/i);
-assert.match(technicalAuditText, /database-user\.js/);
-assert.match(technicalAuditText, /not part of the current shipped Power-Up claim/i);
+assert.match(technicalAuditText, /static Power-Up/i);
+assert.match(technicalAuditText, /invalid, unreferenced.*files were removed/i);
+assert.match(technicalAuditText, /not part of the shipped runtime claim/i);
+assert.equal(fs.existsSync(path.join(__dirname, "database-user.js")), false, "invalid legacy database user module stays removed");
 
 const completionMatrixText = fs.readFileSync(path.join(__dirname, "docs/GOAL_COMPLETION_MATRIX.md"), "utf8");
 assert.match(completionMatrixText, /\| PDF\/Word\/Excel\/image OCR extraction \| Partial \|/);
@@ -251,6 +252,8 @@ assert.doesNotMatch(popupText, /var TRELLO_API_KEY = "87f50d5376d860dfac3dfbb42f
 assert.match(popupText, /color-scheme:\s*light dark/);
 assert.match(popupText, /prefers-color-scheme:\s*dark/);
 assert.match(popupText, /function sanitizeUserVisibleError/);
+assert.match(popupText, /function normalizeBackendForRuntime/);
+assert.match(popupText, /http:\/\/127\.0\.0\.1:18787\/api/);
 assert.match(popupText, /Provider message: " \+ sanitizeUserVisibleError\(error\)/);
 assert.match(popupText, /Could not confirm the Trello comment outcome: " \+ sanitizeUserVisibleError\(error\)/);
 assert.match(popupText, /function trelloCommentAttemptKey/);
@@ -473,6 +476,10 @@ assert.equal(localBackendSettings.apiBase, "http://127.0.0.1:18787/api");
 assert.equal(localBackendSettings.valid, true);
 assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://localhost:18787/api" }).valid, true);
 assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://192.168.1.8:18787/api" }).valid, false);
+assert.deepEqual(SummarizeThis.backendTransportHeaders("https://sample.ngrok-free.app/api"), { "ngrok-skip-browser-warning": "1" });
+assert.deepEqual(SummarizeThis.backendTransportHeaders("https://sample.ngrok-free.dev/api"), { "ngrok-skip-browser-warning": "1" });
+assert.deepEqual(SummarizeThis.backendTransportHeaders("https://powerup.example.com/api"), {});
+assert.deepEqual(SummarizeThis.backendTransportHeaders("not-a-url"), {});
 
 const derivedBackendSettings = SummarizeThis.normalizeBackendSettings({}, {
   enabled: true,

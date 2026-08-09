@@ -23,6 +23,22 @@ $BackendPort = 18787
 $BackendExecutable = Join-Path $AppRoot "SummarizeThisBackend.exe"
 $BackendConfigPath = Join-Path $AppRoot "backend-settings.psd1"
 $BackendPidPath = Join-Path $AppRoot "backend.pid"
+$RuntimeManifestPath = Join-Path $AppRoot "runtime-files.json"
+
+if (-not (Test-Path -LiteralPath $RuntimeManifestPath -PathType Leaf)) {
+  throw "The runtime file allowlist is missing. Reinstall Summarize This."
+}
+$AppRootPrefix = [System.IO.Path]::GetFullPath($AppRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+$AllowedRuntimeFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+$RuntimeFiles = Get-Content -LiteralPath $RuntimeManifestPath -Raw | ConvertFrom-Json
+foreach ($entry in $RuntimeFiles) {
+  $requestName = ([string]$entry).Replace("\", "/").TrimStart("/")
+  $candidate = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($AppRoot, $requestName.Replace("/", [System.IO.Path]::DirectorySeparatorChar)))
+  if ([string]::IsNullOrWhiteSpace($requestName) -or -not $candidate.StartsWith($AppRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "runtime-files.json contains an unsafe path. Reinstall Summarize This."
+  }
+  [void]$AllowedRuntimeFiles.Add($requestName)
+}
 
 function Test-SummarizeThisBackend {
   try {
@@ -154,11 +170,18 @@ function Resolve-RequestPath {
     $pathOnly = "/popup.html"
   }
 
-  $relative = [Uri]::UnescapeDataString($pathOnly.TrimStart("/")).Replace("/", [System.IO.Path]::DirectorySeparatorChar)
-  $root = [System.IO.Path]::GetFullPath($AppRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-  $fullPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($root, $relative))
+  try {
+    $requestName = [Uri]::UnescapeDataString($pathOnly.TrimStart("/")).Replace("\", "/")
+  } catch {
+    return $null
+  }
+  if (-not $AllowedRuntimeFiles.Contains($requestName)) {
+    return $null
+  }
+  $relative = $requestName.Replace("/", [System.IO.Path]::DirectorySeparatorChar)
+  $fullPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($AppRootPrefix, $relative))
 
-  if (-not $fullPath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+  if (-not $fullPath.StartsWith($AppRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
     return $null
   }
 

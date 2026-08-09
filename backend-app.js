@@ -7,6 +7,10 @@ const { buildSupportBundle } = require("./backend-support");
 
 const BODY_LIMIT = 1024 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const HAI_FEED_MAX_BYTES = 1536 * 1024;
+const RATE_LIMIT_BUCKET_SOFT_MAX = 4096;
+const RATE_LIMIT_BUCKET_HARD_MAX = 8192;
+const rateLimitBucketsByStore = new WeakMap();
 const BATCH_CARD_STATUSES = new Set(["pending", "opened", "running", "retry-wait", "analyzed", "copied", "skipped", "blocked", "failed"]);
 const BATCH_EDITABLE_JOB_STATUSES = new Set(["queued", "running"]);
 const BATCH_FINAL_CARD_STATUSES = new Set(["copied", "skipped", "blocked", "failed"]);
@@ -77,6 +81,20 @@ function sanitizeTrelloSourceUri(value) {
 
 function connectorCursor(summary) {
   return `${String(summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+}
+
+function truncateUtf8(value, maxBytes) {
+  const textValue = String(value || "");
+  if (Buffer.byteLength(textValue, "utf8") <= maxBytes) return textValue;
+  let low = 0;
+  let high = textValue.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(textValue.slice(0, middle), "utf8") <= maxBytes) low = middle;
+    else high = middle - 1;
+  }
+  const safeEnd = low > 0 && /[\uD800-\uDBFF]/.test(textValue[low - 1]) ? low - 1 : low;
+  return textValue.slice(0, safeEnd);
 }
 
 async function verifyPassword(password, record) {
@@ -229,22 +247,38 @@ async function appendAlert(store, severity, message, source) {
 }
 
 async function checkRateLimit(store, scope, key, max, windowMs) {
-  const entries = await store.listRateLimits();
   const now = Date.now();
-  const active = entries.filter((item) => item.scope === scope && item.key === key && item.expiresAt > now);
-  if (active.length >= max) {
+  let buckets = rateLimitBucketsByStore.get(store);
+  if (!buckets) {
+    buckets = new Map();
+    rateLimitBucketsByStore.set(store, buckets);
+  }
+  if (buckets.size > RATE_LIMIT_BUCKET_SOFT_MAX) {
+    for (const [bucketKey, bucket] of buckets) {
+      if (bucket.expiresAt <= now) buckets.delete(bucketKey);
+    }
+  }
+  const bucketKey = `${String(scope)}\u0000${String(key)}`;
+  let bucket = buckets.get(bucketKey);
+  if (bucket && bucket.expiresAt <= now) {
+    buckets.delete(bucketKey);
+    bucket = null;
+  }
+  if (!bucket && buckets.size >= RATE_LIMIT_BUCKET_HARD_MAX) {
+    return { ok: false, retryAfterSeconds: 1 };
+  }
+  if (!bucket) {
+    bucket = { count: 0, expiresAt: now + windowMs };
+  }
+  if (bucket.count >= max) {
     return {
       ok: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((Math.min(...active.map((item) => item.expiresAt)) - now) / 1000))
+      retryAfterSeconds: Math.max(1, Math.ceil((bucket.expiresAt - now) / 1000))
     };
   }
-  await store.touchRateLimit({
-    id: createId("rate"),
-    scope,
-    key,
-    createdAt: now,
-    expiresAt: now + windowMs
-  });
+  bucket.count += 1;
+  buckets.delete(bucketKey);
+  buckets.set(bucketKey, bucket);
   return { ok: true, retryAfterSeconds: 0 };
 }
 
@@ -682,32 +716,38 @@ async function route(req, res, store) {
       json(res, 429, { error: "HAI feed rate limit exceeded", retryAfterSeconds: limitResult.retryAfterSeconds });
       return;
     }
-    const cursor = String(requestUrl.searchParams.get("cursor") || "").slice(0, 300);
-    const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 50) || 50));
+    const requestedCursor = String(requestUrl.searchParams.get("cursor") || "").slice(0, 300);
+    const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 100) || 100));
     const approved = (await store.list("summaries"))
-      .filter((item) => item.userId === token.userId && item.haiApprovedAt && connectorCursor(item) > cursor)
-      .sort((left, right) => connectorCursor(left).localeCompare(connectorCursor(right)))
-      .slice(0, limit);
-    const items = approved.map((item) => ({
+      .filter((item) => item.userId === token.userId && item.haiApprovedAt && connectorCursor(item) > requestedCursor)
+      .sort((left, right) => connectorCursor(left).localeCompare(connectorCursor(right)));
+    const page = approved.slice(0, limit);
+    const items = page.map((item) => ({
       externalId: `summarize-this:${item.id}`,
       title: String(item.title || "Reviewed Trello summary").slice(0, 300),
-      content: String(item.summary || "").slice(0, 100_000),
+      content: truncateUtf8(item.summary, 100_000),
       sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
-      itemType: "trello-card-summary",
+      itemType: "card",
+      provider: "trello",
+      accountLabel: "summarize-this",
       projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
-      metadata: JSON.stringify({
-        reviewedAt: item.reviewedAt || null,
-        haiApprovedAt: item.haiApprovedAt,
-        method: item.method || "reviewed-import",
-        providerMode: item.providerMode || "local"
-      })
+      receivedAt: item.haiApprovedAt
     }));
+    while (items.length > 1) {
+      const candidateCursor = connectorCursor(page[items.length - 1]);
+      if (Buffer.byteLength(JSON.stringify({ items, cursor: candidateCursor, nextCursor: candidateCursor }), "utf8") <= HAI_FEED_MAX_BYTES) break;
+      items.pop();
+    }
+    const responseCursor = items.length
+      ? connectorCursor(page[items.length - 1])
+      : requestedCursor;
     await store.updateRecord("haiTokens", token.id, (record) => {
       record.lastUsedAt = nowIso();
     });
     json(res, 200, {
       items,
-      nextCursor: approved.length ? connectorCursor(approved[approved.length - 1]) : cursor
+      cursor: responseCursor,
+      nextCursor: responseCursor
     });
     return;
   }
@@ -1970,7 +2010,7 @@ async function createBackendApp(options = {}) {
       if (origin) {
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, ngrok-skip-browser-warning");
         res.setHeader("Access-Control-Max-Age", "86400");
         res.setHeader("Vary", "Origin");
       }

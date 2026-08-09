@@ -3,6 +3,7 @@ const config = require("./backend-config");
 const readiness = config.backendReadiness();
 const selectedStorage = config.publicConfig().storage;
 const hasMissing = (name) => readiness.missing.some((item) => item.startsWith(name));
+const invalidStorage = hasMissing("BACKEND_STORE");
 const checks = [
   {
     label: "Session hash secret configured",
@@ -16,8 +17,10 @@ const checks = [
   },
   {
     label: "Database runtime boundary",
-    ok: selectedStorage !== "postgres" || !hasMissing("DATABASE_URL"),
-    detail: selectedStorage === "postgres"
+    ok: !invalidStorage && (selectedStorage !== "postgres" || !hasMissing("DATABASE_URL")),
+    detail: invalidStorage
+      ? "BACKEND_STORE must be local or postgres."
+      : selectedStorage === "postgres"
       ? (readiness.optional.DATABASE_URL ? "PostgreSQL store selected and DATABASE_URL is configured." : "PostgreSQL store selected but DATABASE_URL is missing.")
       : (readiness.optional.DATABASE_URL ? "Local JSON store selected explicitly; DATABASE_URL is not used." : "Local JSON store selected.")
   },

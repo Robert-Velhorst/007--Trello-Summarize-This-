@@ -1,6 +1,6 @@
 # Final No-Excuses Search
 
-Date: 2026-08-08
+Date: 2026-08-09
 Previous: 2026-07-23 (Phase 115)
 
 ## Command Run
@@ -21,7 +21,6 @@ The following files contain one or more of the target patterns. Each is assessed
 | `advanced-modules.js` | placeholder, TODO | Legacy module. Not part of shipped flow. Contains comments about future integration points. |
 | `ai-providers.js` | token, secret, mock | token/secret references are in error sanitization patterns (removing them from output). mock is used in tests only. |
 | `analytics-dashboard.js` | TODO, placeholder | Legacy analytics module. Not in shipped flow. |
-| `analytics-framework.js` | TODO | Legacy module. Not in shipped flow. |
 | `artillery-processor.js` | token | Load test file. Not in shipped flow. |
 | `attachment-processor.js` | token | Used in error sanitization to detect and strip sensitive URLs. Not a stored token. |
 | `backend-app.js` | password, token, secret | password — handled via salted hashes for user accounts and env-based admin credentials. token — used correctly as Bearer token auth. secret — JWT_SECRET environment variable reference. |
@@ -33,7 +32,6 @@ The following files contain one or more of the target patterns. Each is assessed
 | `connector.js` | token | Trello API token in authorization-status check — correct use. |
 | `credit-usage-analytics.js` | mock | Legacy analytics. Not in shipped flow. |
 | `custom-prompts.js` | placeholder | Placeholder is used as a UI label string, not a code placeholder. |
-| `database-user.js` | password, token | Legacy DB user module. Requires pg dep. Not active. |
 | `environments.js` | token, secret | Legacy environment module. |
 | `errorHandler.js` | TODO | Legacy file. Not in shipped flow. |
 | `export.js` | token | Trello auth token reference in export helpers. Correct use. |
@@ -64,7 +62,7 @@ All token/secret/password references in the active surface (`connector.js`, `pop
 - API key input fields of type="password" (correct HTML)
 - Environment variable name references (not values)
 
-Legacy/inactive files with patterns are documented in `docs/TECHNICAL_AUDIT.md` as not part of the shipped surface.
+Legacy/inactive files with patterns are documented in `docs/TECHNICAL_AUDIT.md` as not part of the shipped surface. Seven unreferenced files that did not contain valid JavaScript (`analytics-framework.js`, `database-user.js`, `optimized-index.js`, `optimized-server.js`, `purchase.js`, `service-worker.js`, and `summary.js`) were removed in the production-completion audit instead of being left as misleading code.
 
 The 2026-08-08 pass also reviewed `backend-lock.js`, `backend-migrations.js`, `backend-worker.js`, `backend-support.js`, `backend-cli.js`, `Dockerfile`, Compose, and the expanded CI workflow. No embedded runtime secret was found. Example/test secrets are scoped to disposable tests or `.env.example`, and `.env` plus runtime state remain ignored. `npm audit` reported zero vulnerabilities.
 

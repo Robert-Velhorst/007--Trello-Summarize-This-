@@ -5,7 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Summarize This Settings</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script>
+    window.SummarizeThisTrelloClientReady = new Promise(function (resolve) {
+      if (window.self === window.top) {
+        resolve();
+        return;
+      }
+      var script = document.createElement("script");
+      var settled = false;
+      var timer = window.setTimeout(done, 10000);
+      function done() {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve();
+      }
+      script.src = "https://p.trellocdn.com/power-up.min.js";
+      script.onload = done;
+      script.onerror = done;
+      document.head.appendChild(script);
+    });
+  </script>
   <style>
     :root {
       color-scheme: light dark;
@@ -567,6 +587,7 @@
   <script>
     /* global TrelloPowerUp, SummarizeThis */
 
+    window.SummarizeThisTrelloClientReady.then(function () {
     (function () {
       "use strict";
 
@@ -645,9 +666,18 @@
       document.getElementById("showHaiConnectorButton").addEventListener("click", toggleHaiConnectorVisibility);
       document.getElementById("copyHaiConnectorButton").addEventListener("click", copyHaiConnector);
       document.getElementById("revokeHaiConnectorButton").addEventListener("click", revokeHaiConnector);
-      document.addEventListener("DOMContentLoaded", loadSettings);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", loadSettings);
+      } else {
+        loadSettings();
+      }
 
       async function loadSettings() {
+        if (window.self !== window.top && !inTrello) {
+          document.querySelectorAll("button").forEach(function (button) { button.disabled = true; });
+          showMessage("The Trello client could not load. Close settings and try again.", "error");
+          return;
+        }
         var settings = await readSettings();
         fields.analysisMode.value = settings.analysisMode || "auto";
         fields.provider.value = settings.provider || "openai";
@@ -918,7 +948,7 @@
       async function backendRequest(path, options, requireToken) {
         var backend = configuredBackend();
         if (!backend.valid) throw new Error(backend.error || "Add a valid backend API base first.");
-        var headers = { "Content-Type": "application/json" };
+        var headers = Object.assign({ "Content-Type": "application/json" }, SummarizeThis.backendTransportHeaders(backend.apiBase));
         if (requireToken) {
           var token = String(fields.backendSessionToken.value || await readBackendSessionToken() || "").trim();
           if (!token) throw new Error("Sign in to the backend first.");
@@ -1327,6 +1357,7 @@
         }, 3000);
       }
     }());
+    });
   </script>
 </body>
 </html>

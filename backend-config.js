@@ -48,6 +48,9 @@ function missingEnvForBackend() {
   if (String(current.ADMIN_PASSWORD).length < MIN_ADMIN_PASSWORD_LENGTH || isPlaceholderSecret(current.ADMIN_PASSWORD)) {
     missing.push(`ADMIN_PASSWORD (minimum ${MIN_ADMIN_PASSWORD_LENGTH} characters, non-placeholder)`);
   }
+  if (current.BACKEND_STORE && !["local", "postgres"].includes(current.BACKEND_STORE)) {
+    missing.push("BACKEND_STORE (must be local or postgres)");
+  }
   if (current.BACKEND_STORE === "postgres" && !String(current.DATABASE_URL).trim()) {
     missing.push("DATABASE_URL (required when BACKEND_STORE=postgres)");
   }

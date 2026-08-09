@@ -46,12 +46,28 @@ try {
     throw "Packaged backend did not create its private local store."
   }
 
+  Start-Sleep -Seconds 1
+  $Process.Refresh()
+  $idleWorkingSet = $Process.WorkingSet64
+  $idlePrivateMemory = $Process.PrivateMemorySize64
+  $cpuBefore = $Process.TotalProcessorTime.TotalMilliseconds
+  for ($request = 0; $request -lt 100; $request++) {
+    $requestHealth = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 2
+    if ($requestHealth.status -ne "ok") { throw "Packaged backend failed during the resource probe." }
+  }
+  $Process.Refresh()
+  $cpuForHundredHealthRequests = [Math]::Max(0, $Process.TotalProcessorTime.TotalMilliseconds - $cpuBefore)
+
   [pscustomobject]@{
     Status = $Health.status
     Version = $Health.version
     Storage = $Health.storage.kind
     StoreBytes = (Get-Item -LiteralPath $StorePath).Length
     ExecutableBytes = (Get-Item -LiteralPath $Executable).Length
+    IdleWorkingSetBytes = $idleWorkingSet
+    IdlePrivateMemoryBytes = $idlePrivateMemory
+    CpuMsFor100HealthRequests = [Math]::Round($cpuForHundredHealthRequests, 2)
+    ThreadsAfterProbe = $Process.Threads.Count
   }
 } finally {
   if ($Process -and -not $Process.HasExited) {
