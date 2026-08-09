@@ -13,6 +13,7 @@ process.env.ANTHROPIC_API_KEY = "";
 process.env.GOOGLE_API_KEY = "";
 process.env.PROXY_ENDPOINT = "";
 process.env.DATABASE_URL = "";
+process.env.HAI_CONNECTOR_ENABLED = "true";
 
 const { createBackendApp } = require("./backend-app");
 const { DEFAULT_RUNTIME_STORE_PATH, LocalBackendStore } = require("./backend-storage");
@@ -317,6 +318,69 @@ async function main() {
     assert.equal(idempotentSummaryFirst.status, 200);
     assert.equal(idempotentSummarySecond.status, 200);
     assert.equal(idempotentSummaryFirst.data.result.id, idempotentSummarySecond.data.result.id);
+
+    const rejectedReviewedSummary = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true,
+      title: "Unsafe source URL",
+      content: "This reviewed summary must not accept a source URL carrying credentials.",
+      sourceUri: "https://example.test/card?token=secret"
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(rejectedReviewedSummary.status, 400);
+
+    const reviewedSummary = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true,
+      haiApproved: true,
+      title: "Contract card summary",
+      content: "The exact reviewed summary content approved for HAI ingestion.",
+      sourceUri: "https://trello.com/c/abc123/contract-card?irrelevant=removed#section",
+      cardId: "abc123",
+      runId: "run-contract-1",
+      providerMode: "local",
+      confidence: 0.9
+    }, {
+      Authorization: `Bearer ${token}`,
+      "Idempotency-Key": "reviewed-contract-1"
+    });
+    assert.equal(reviewedSummary.status, 201);
+    assert.ok(reviewedSummary.data.summary.haiApprovedAt);
+    assert.equal(reviewedSummary.data.summary.sourceUri, "https://trello.com/c/abc123/contract-card");
+
+    const listedSummaries = await requestJson(app, "GET", "/api/summaries?limit=100", undefined, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(listedSummaries.status, 200);
+    assert.ok(listedSummaries.data.summaries.some((item) => item.id === reviewedSummary.data.summary.id));
+
+    const firstHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(firstHaiToken.status, 201);
+    assert.match(firstHaiToken.data.feedPath, /^\/api\/integrations\/hai\/feed\/hai_/);
+    const storedHaiTokens = await app.store.list("haiTokens");
+    assert.equal(storedHaiTokens.some((item) => item.tokenHash === firstHaiToken.data.token), false);
+
+    const haiFeed = await requestJson(app, "GET", firstHaiToken.data.feedPath);
+    assert.equal(haiFeed.status, 200);
+    assert.equal(haiFeed.data.items.length, 1);
+    assert.equal(haiFeed.data.items[0].externalId, `summarize-this:${reviewedSummary.data.summary.id}`);
+    assert.equal(haiFeed.data.items[0].content, "The exact reviewed summary content approved for HAI ingestion.");
+    assert.equal(haiFeed.data.items[0].sourceUri, "https://trello.com/c/abc123/contract-card");
+    assert.ok(haiFeed.data.nextCursor);
+    const emptyHaiFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(haiFeed.data.nextCursor)}`);
+    assert.equal(emptyHaiFeed.status, 200);
+    assert.deepEqual(emptyHaiFeed.data.items, []);
+
+    const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(rotatedHaiToken.status, 201);
+    assert.equal((await requestJson(app, "GET", firstHaiToken.data.feedPath)).status, 404);
+    assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 200);
+    const revokedHaiToken = await requestJson(app, "DELETE", "/api/integrations/hai/token", undefined, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(revokedHaiToken.status, 200);
+    assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 404);
 
     const credits = await requestJson(app, "GET", "/api/user/credits", undefined, {
       Authorization: `Bearer ${token}`
@@ -810,8 +874,8 @@ async function main() {
   assert.ok(databaseUrlApp.store instanceof LocalBackendStore);
   assert.equal(fs.existsSync(databaseUrlPath), true);
   await assert.rejects(
-    () => createBackendApp({ filePath: databaseUrlPath, storeType: "postgres" }),
-    /Only the local JSON runtime store is implemented/
+    () => createBackendApp({ filePath: databaseUrlPath, storeType: "unsupported" }),
+    /Unsupported backend store/
   );
   process.env.DATABASE_URL = "";
   fs.rmSync(databaseUrlPath, { force: true });

@@ -1,3 +1,7 @@
+param(
+  [string]$PayloadInspectionPath = ""
+)
+
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
@@ -8,36 +12,20 @@ $PayloadZip = Join-Path $BuildRoot "payload.zip"
 $SourcePath = Join-Path $BuildRoot "SummarizeThisSetup.cs"
 $OutputExe = Join-Path $DistDir "SummarizeThisSetup.exe"
 
-$RuntimeFiles = @(
-  "manifest.json",
-  "connector.html",
-  "trello-runtime-config.js",
-  "connector.js",
-  "popup.html",
-  "settings-powerup.html",
-  "trello-setup.html",
-  "privacy.html",
-  "terms.html",
-  "update.json",
-  "trello-admin-config.js",
-  "attachment-processor.js",
-  "summarizer-core.js",
-  "card-intelligence-ledger.js",
-  "icon.svg",
-  "index.html",
-  "index-original.html",
-  "settings.html",
-  "popup-999-accuracy.html",
-  "popup-enhanced.html",
-  "popup-nextgen.html",
-  "popup-original.html"
-)
+$RuntimeManifestPath = Join-Path $RepoRoot "runtime-files.json"
+$RuntimeFiles = Get-Content -LiteralPath $RuntimeManifestPath -Raw | ConvertFrom-Json
+
+if ($RuntimeFiles.Count -eq 0 -or $RuntimeFiles.Count -ne (@($RuntimeFiles | Select-Object -Unique)).Count) {
+  throw "runtime-files.json must contain a non-empty unique file list."
+}
 
 $InstallerFiles = @(
   "install.ps1",
   "Start-SummarizeThis.ps1",
+  "Start-SummarizeThisCloud.ps1",
   "uninstall.ps1"
 )
+$BackendExecutable = Join-Path $RepoRoot "dist\windows-backend\SummarizeThisBackend.exe"
 
 $CompilerCandidates = @(
   (Join-Path $env:SystemRoot "Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
@@ -80,34 +68,43 @@ try {
   foreach ($file in $InstallerFiles) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $StagingDir $file) -Force
   }
+  if (-not (Test-Path -LiteralPath $BackendExecutable -PathType Leaf)) {
+    throw "Missing packaged backend. Run npm run build:windows-backend first."
+  }
+  Copy-Item -LiteralPath $BackendExecutable -Destination (Join-Path $StagingDir "SummarizeThisBackend.exe") -Force
+
+  if (-not [string]::IsNullOrWhiteSpace($PayloadInspectionPath)) {
+    $inspectionPath = if ([System.IO.Path]::IsPathRooted($PayloadInspectionPath)) {
+      [System.IO.Path]::GetFullPath($PayloadInspectionPath)
+    } else {
+      [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $PayloadInspectionPath))
+    }
+    $repoPrefix = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $inspectionPath.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "Payload inspection output must stay inside the repository."
+    }
+    if (Test-Path -LiteralPath $inspectionPath) {
+      Remove-Item -LiteralPath $inspectionPath -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $inspectionPath | Out-Null
+    Copy-Item -Path (Join-Path $StagingDir "*") -Destination $inspectionPath -Recurse -Force
+  }
 
   Compress-Archive -Path (Join-Path $StagingDir "*") -DestinationPath $PayloadZip -Force
 
-  $payloadBase64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($PayloadZip))
   $payloadHash = (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash
-  $chunks = New-Object System.Collections.Generic.List[string]
-  for ($i = 0; $i -lt $payloadBase64.Length; $i += 3000) {
-    $length = [Math]::Min(3000, $payloadBase64.Length - $i)
-    $chunks.Add('      "' + $payloadBase64.Substring($i, $length) + '"')
-  }
-
-  $chunkSource = $chunks -join ",`r`n"
   $source = @"
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Security.Cryptography;
 
 namespace SummarizeThisInstaller
 {
   internal static class Program
   {
-    private static readonly string[] PayloadChunks = new[]
-    {
-$chunkSource
-    };
-
     private const string PayloadSha256 = "$payloadHash";
 
     [STAThread]
@@ -119,7 +116,17 @@ $chunkSource
       try
       {
         string payloadPath = Path.Combine(installRoot, "payload.zip");
-        File.WriteAllBytes(payloadPath, Convert.FromBase64String(string.Concat(PayloadChunks)));
+        using (Stream embeddedPayload = Assembly.GetExecutingAssembly().GetManifestResourceStream("SummarizeThisPayload"))
+        {
+          if (embeddedPayload == null)
+          {
+            throw new InvalidDataException("Installer payload resource is missing.");
+          }
+          using (FileStream payloadOutput = File.Create(payloadPath))
+          {
+            embeddedPayload.CopyTo(payloadOutput);
+          }
+        }
         using (SHA256 sha256 = SHA256.Create())
         using (FileStream payloadStream = File.OpenRead(payloadPath))
         {
@@ -193,6 +200,7 @@ $chunkSource
     /target:winexe `
     /platform:anycpu `
     "/out:$OutputExe" `
+    "/resource:$PayloadZip,SummarizeThisPayload,private" `
     /reference:System.IO.Compression.dll `
     /reference:System.IO.Compression.FileSystem.dll `
     $SourcePath

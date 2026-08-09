@@ -38,8 +38,16 @@ function resolveBackendFilePath(options = {}) {
 
 function normalizeBackendStoreOptions(options = {}) {
   return Object.assign({}, options, {
-    filePath: resolveBackendFilePath(options)
+    filePath: resolveBackendFilePath(options),
+    explicitFilePath: Boolean(options.filePath || options.storagePath)
   });
+}
+
+function resolveBackendStoreType(options = {}) {
+  const configured = String(options.storeType || process.env.BACKEND_STORE || "").trim().toLowerCase();
+  if (configured) return configured;
+  if (options.explicitFilePath) return "local";
+  return String(options.databaseUrl || process.env.DATABASE_URL || "").trim() ? "postgres" : "local";
 }
 
 function defaultState() {
@@ -363,10 +371,10 @@ class LocalBackendStore {
     const exportedUser = clone(user);
     delete exportedUser.passwordHash;
     delete exportedUser.passwordSalt;
-    const record = { user: exportedUser, workspaces: [], memberships: [], summaries: [], transactions: [], events: [], reviews: [], batchJobs: [], reminders: [], notifications: [], analyticsEvents: [] };
+    const record = { user: exportedUser, workspaces: [], memberships: [], summaries: [], transactions: [], events: [], reviews: [], batchJobs: [], reminders: [], notifications: [], analyticsEvents: [], haiTokens: [] };
     record.workspaces = clone(this.state.workspaces.filter((item) => workspaceIds.includes(item.id)));
     record.memberships = clone(this.state.memberships.filter((item) => item.userId === userId));
-    ["summaries", "transactions", "reviews", "batchJobs", "reminders", "notifications", "analyticsEvents"].forEach((name) => {
+    ["summaries", "transactions", "reviews", "batchJobs", "reminders", "notifications", "analyticsEvents", "haiTokens"].forEach((name) => {
       record[name] = clone(this.state[name].filter((item) => item.userId === userId));
     });
     record.events = clone(this.state.events.filter((item) => item.payload && item.payload.userId === userId));
@@ -377,7 +385,7 @@ class LocalBackendStore {
     const user = this.state.users.find((item) => item.id === userId);
     if (!user) return null;
     const removed = {};
-    const directCollections = ["sessions", "summaries", "transactions", "reviews", "batchJobs", "reminders", "notifications", "analyticsEvents"];
+    const directCollections = ["sessions", "summaries", "transactions", "reviews", "batchJobs", "reminders", "notifications", "analyticsEvents", "haiTokens"];
     directCollections.forEach((name) => {
       const before = this.state[name].length;
       this.state[name] = this.state[name].filter((item) => item.userId !== userId);
@@ -423,7 +431,7 @@ class LocalBackendStore {
       this.state.sessions = this.state.sessions.filter((session) => session.role === "admin" || usersById.has(session.userId));
       if (sessionCount !== this.state.sessions.length) fixes.push({ type: "removed-orphan-sessions", count: sessionCount - this.state.sessions.length });
     }
-    ["summaries", "transactions", "batchJobs", "reminders", "notifications", "analyticsEvents"].forEach((name) => {
+    ["summaries", "transactions", "batchJobs", "reminders", "notifications", "analyticsEvents", "haiTokens"].forEach((name) => {
       const before = this.state[name].length;
       this.state[name].forEach((item) => {
         if (item.userId && !usersById.has(item.userId)) issues.push({ type: "orphan-record", collection: name, id: item.id, userId: item.userId });
@@ -459,12 +467,133 @@ class LocalBackendStore {
   }
 }
 
+class PostgresBackendStore extends LocalBackendStore {
+  constructor(options = {}) {
+    super(options);
+    this.databaseUrl = String(options.databaseUrl || process.env.DATABASE_URL || "").trim();
+    this.tableName = String(options.postgresTable || process.env.BACKEND_POSTGRES_TABLE || "summarize_this_runtime_state").trim();
+    if (!/^[a-z][a-z0-9_]{0,62}$/.test(this.tableName)) {
+      throw new Error("BACKEND_POSTGRES_TABLE must be a lowercase PostgreSQL identifier.");
+    }
+    this.quotedTable = `"${this.tableName}"`;
+    this.pool = null;
+    this.lockClient = null;
+    this.databaseRevision = 0;
+    this.storageKind = "postgres";
+  }
+
+  async initialize(seedPasswordRecord) {
+    if (!this.databaseUrl) throw new Error("DATABASE_URL is required when BACKEND_STORE=postgres.");
+    const { Pool } = require("pg");
+    const sslEnabled = String(process.env.DATABASE_SSL || "").toLowerCase() === "true";
+    this.pool = new Pool({
+      connectionString: this.databaseUrl,
+      max: Math.max(1, Math.min(20, Number(process.env.DB_POOL_MAX || 4))),
+      idleTimeoutMillis: Math.max(1_000, Number(process.env.DB_IDLE_TIMEOUT || 30_000)),
+      connectionTimeoutMillis: Math.max(1_000, Number(process.env.DB_CONNECTION_TIMEOUT || 5_000)),
+      ssl: sslEnabled ? { rejectUnauthorized: String(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED || "true").toLowerCase() !== "false" } : false
+    });
+    this.pool.on("error", (error) => console.error(`PostgreSQL pool error: ${error.message}`));
+
+    try {
+      this.lockClient = await this.pool.connect();
+      const lock = await this.lockClient.query("SELECT pg_try_advisory_lock(hashtext($1)) AS acquired", [`summarize-this:${this.tableName}`]);
+      if (!lock.rows[0].acquired) {
+        throw new Error("PostgreSQL runtime startup blocked: another Summarize This writer owns this database state.");
+      }
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS ${this.quotedTable} (
+          id TEXT PRIMARY KEY,
+          revision BIGINT NOT NULL DEFAULT 0,
+          state JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT summarize_this_primary_state CHECK (id = 'primary')
+        )
+      `);
+      await this.pool.query(
+        `INSERT INTO ${this.quotedTable} (id, state) VALUES ('primary', $1::jsonb) ON CONFLICT (id) DO NOTHING`,
+        [JSON.stringify(defaultState())]
+      );
+      const result = await this.pool.query(`SELECT revision, state FROM ${this.quotedTable} WHERE id = 'primary'`);
+      if (result.rowCount !== 1) throw new Error("PostgreSQL runtime state could not be initialized.");
+      this.databaseRevision = Number(result.rows[0].revision);
+      this.state = migrateState(typeof result.rows[0].state === "string" ? JSON.parse(result.rows[0].state) : result.rows[0].state).state;
+
+      if (seedPasswordRecord) {
+        const seedUser = this.state.users.find((item) => item.id === "seed-user");
+        if (seedUser && !seedUser.passwordHash) {
+          seedUser.passwordHash = seedPasswordRecord.hash;
+          seedUser.passwordSalt = seedPasswordRecord.salt;
+          seedUser.updatedAt = nowIso();
+        }
+      }
+      await this.persist();
+      return this;
+    } catch (error) {
+      await this.close().catch(() => {});
+      throw error;
+    }
+  }
+
+  async persist() {
+    if (!this.pool || !this.state) throw new Error("PostgreSQL store is not initialized.");
+    this.state.meta.updatedAt = nowIso();
+    const stateSnapshot = clone(this.state);
+    const write = this.persistQueue.then(async () => {
+      const expectedRevision = this.databaseRevision;
+      const result = await this.pool.query(
+        `UPDATE ${this.quotedTable} SET state = $1::jsonb, revision = revision + 1, updated_at = NOW() WHERE id = 'primary' AND revision = $2 RETURNING revision`,
+        [JSON.stringify(stateSnapshot), expectedRevision]
+      );
+      if (result.rowCount !== 1) {
+        const current = await this.pool.query(`SELECT revision, state FROM ${this.quotedTable} WHERE id = 'primary'`);
+        if (current.rowCount === 1) {
+          this.databaseRevision = Number(current.rows[0].revision);
+          this.state = migrateState(typeof current.rows[0].state === "string" ? JSON.parse(current.rows[0].state) : current.rows[0].state).state;
+        }
+        throw new Error("Concurrent PostgreSQL state update detected; the request was not committed and must be retried.");
+      }
+      this.databaseRevision = Number(result.rows[0].revision);
+    });
+    this.persistQueue = write.catch(() => {});
+    return write;
+  }
+
+  async databaseHealth() {
+    const startedAt = Date.now();
+    const result = await this.pool.query(`SELECT revision FROM ${this.quotedTable} WHERE id = 'primary'`);
+    return {
+      ok: result.rowCount === 1,
+      kind: "postgres",
+      revision: result.rowCount === 1 ? Number(result.rows[0].revision) : null,
+      latencyMs: Date.now() - startedAt
+    };
+  }
+
+  async close() {
+    if (this.lockClient) {
+      await this.lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", [`summarize-this:${this.tableName}`]).catch(() => {});
+      this.lockClient.release();
+      this.lockClient = null;
+    }
+    if (this.pool) {
+      const pool = this.pool;
+      this.pool = null;
+      await pool.end();
+    }
+  }
+}
+
 async function createBackendStore(options = {}) {
   const normalizedOptions = normalizeBackendStoreOptions(options);
-  const storeType = normalizedOptions.storeType || process.env.BACKEND_STORE || "local";
+  const storeType = resolveBackendStoreType(normalizedOptions);
   const seedPasswordRecord = normalizedOptions.seedPasswordRecord || null;
+  if (storeType === "postgres") {
+    const store = new PostgresBackendStore(normalizedOptions);
+    return store.initialize(seedPasswordRecord);
+  }
   if (storeType !== "local") {
-    throw new Error(`Unsupported backend store "${storeType}". Only the local JSON runtime store is implemented.`);
+    throw new Error(`Unsupported backend store "${storeType}". Use "local" or "postgres".`);
   }
 
   const store = new LocalBackendStore({
@@ -478,8 +607,10 @@ module.exports = {
   createId,
   DEFAULT_RUNTIME_STORE_PATH,
   LocalBackendStore,
+  PostgresBackendStore,
   CURRENT_SCHEMA_VERSION,
   defaultState,
   normalizeBackendStoreOptions,
+  resolveBackendStoreType,
   resolveBackendFilePath
 };

@@ -6,10 +6,9 @@
   <title>Summarize This</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./trello-config.js?v=1.3.0"></script>
-  <script src="./attachment-processor.js?v=1.3.0"></script>
-  <script src="./summarizer-core.js?v=1.3.0"></script>
-  <script src="./card-intelligence-ledger.js?v=1.3.0"></script>
+  <script src="./trello-config.js?v=20260809.1"></script>
+  <script src="./summarizer-core.js?v=20260809.1"></script>
+  <script src="./card-intelligence-ledger.js?v=20260809.1"></script>
   <style>
     :root {
       color-scheme: light dark;
@@ -979,6 +978,23 @@
       </section>
 
       <section class="panel">
+        <h2 class="section-title">Save reviewed summary</h2>
+        <p class="section-body">Save this exact result to your configured backend. Nothing is sent until you approve it here.</p>
+        <label class="checkbox-row" for="backendSaveApproval">
+          <input id="backendSaveApproval" type="checkbox">
+          <span>I reviewed this exact summary and approve saving it to my backend.</span>
+        </label>
+        <label class="checkbox-row" for="haiSummaryApproval">
+          <input id="haiSummaryApproval" type="checkbox">
+          <span>Also approve this reviewed summary for my private HAI connector feed.</span>
+        </label>
+        <div class="actions">
+          <button class="primary" type="button" id="saveReviewedSummaryButton" disabled>Save reviewed summary</button>
+        </div>
+        <p id="backendSaveStatus" class="feedback-status"></p>
+      </section>
+
+      <section class="panel">
         <h2 class="section-title">History</h2>
         <p id="historyChangeText" class="section-body">No previous analyses yet.</p>
         <ul id="historyChangeList" class="compact-list"></ul>
@@ -1188,6 +1204,8 @@
       document.getElementById("needsFollowUpButton").addEventListener("click", function () {
         saveReviewState("needs-follow-up");
       });
+      document.getElementById("backendSaveApproval").addEventListener("change", updateBackendSaveControls);
+      document.getElementById("saveReviewedSummaryButton").addEventListener("click", saveReviewedSummaryToBackend);
       document.getElementById("historyList").addEventListener("click", copyHistoryRun);
       document.getElementById("postbackApproval").addEventListener("change", updatePostbackControls);
       document.getElementById("descriptionWriteApproval").addEventListener("change", updateDescriptionWriteControls);
@@ -1732,6 +1750,30 @@
         });
       }
 
+      var attachmentProcessorLoadPromise = null;
+
+      function ensureAttachmentProcessor() {
+        if (window.AttachmentProcessor) return Promise.resolve(window.AttachmentProcessor);
+        if (attachmentProcessorLoadPromise) return attachmentProcessorLoadPromise;
+        attachmentProcessorLoadPromise = new Promise(function (resolve, reject) {
+          var script = document.createElement("script");
+          script.src = "./attachment-processor.js?v=1.1.0";
+          script.async = true;
+          script.onload = function () {
+            if (window.AttachmentProcessor) resolve(window.AttachmentProcessor);
+            else reject(new Error("Attachment processor loaded without exposing its runtime."));
+          };
+          script.onerror = function () {
+            reject(new Error("Attachment processor could not be loaded."));
+          };
+          document.head.appendChild(script);
+        }).catch(function (error) {
+          attachmentProcessorLoadPromise = null;
+          throw error;
+        });
+        return attachmentProcessorLoadPromise;
+      }
+
       async function readCardAttachments(card, settings, options) {
         var attachments = Array.isArray(card.attachments) ? card.attachments : [];
         if (!attachments.length) {
@@ -1760,15 +1802,8 @@
           };
         }
 
-        if (!window.AttachmentProcessor) {
-          return {
-            ok: false,
-            value: attachments,
-            error: "Attachment processor is not available."
-          };
-        }
-
         try {
+          await ensureAttachmentProcessor();
           var processor = new window.AttachmentProcessor();
           var result = await processor.processSafeTextAttachments(attachments, {
             maxAttachments: 5,
@@ -4828,6 +4863,55 @@
         return data;
       }
 
+      function updateBackendSaveControls() {
+        document.getElementById("saveReviewedSummaryButton").disabled = !document.getElementById("backendSaveApproval").checked;
+      }
+
+      async function saveReviewedSummaryToBackend() {
+        var status = document.getElementById("backendSaveStatus");
+        if (!lastAnalysis || !lastCardData || !lastLedgerRun) {
+          status.textContent = "Analyze the card before saving a reviewed summary.";
+          return;
+        }
+        if (!document.getElementById("backendSaveApproval").checked) {
+          status.textContent = "Review the exact summary and tick the approval box first.";
+          return;
+        }
+        var content = CardIntelligenceLedger.markdownForLedgerRun(lastLedgerRun);
+        var overallConfidence = lastLedgerRun.result && lastLedgerRun.result.confidence
+          ? Number(lastLedgerRun.result.confidence.overall || 0)
+          : 0;
+        if (overallConfidence > 1) overallConfidence = overallConfidence / 100;
+        var payload = {
+          reviewed: true,
+          haiApproved: document.getElementById("haiSummaryApproval").checked,
+          title: String(lastCardData.name || "Reviewed Trello summary"),
+          content: content,
+          sourceUri: String(lastCardData.url || lastCardData.shortUrl || ""),
+          cardId: String(lastCardData.id || ""),
+          runId: String(lastLedgerRun.id || ""),
+          providerMode: String(lastLedgerRun.provider || "local"),
+          confidence: overallConfidence
+        };
+        status.textContent = payload.haiApproved
+          ? "Saving reviewed summary and approving it for HAI..."
+          : "Saving reviewed summary...";
+        try {
+          var response = await fetchBackendJson("/summaries/reviewed", {
+            method: "POST",
+            headers: { "Idempotency-Key": "reviewed-" + payload.runId + "-" + (payload.haiApproved ? "hai" : "private") },
+            body: JSON.stringify(payload)
+          }, lastSettings || {});
+          status.textContent = response.summary && response.summary.haiApprovedAt
+            ? "Reviewed summary saved and approved for HAI."
+            : "Reviewed summary saved privately. It is not in the HAI feed.";
+          document.getElementById("backendSaveApproval").checked = false;
+          updateBackendSaveControls();
+        } catch (error) {
+          status.textContent = "Summary was not saved: " + sanitizeUserVisibleError(error);
+        }
+      }
+
       async function ensureBackendBatchJob(review, settings) {
         var payload = {
           listName: review.listName || "",
@@ -5156,7 +5240,7 @@
             height: 620
           });
         } else {
-          window.location.href = "./settings-powerup.html";
+          window.location.href = "./settings-powerup.html" + (installedMode ? "?installed=1" : "");
         }
       }
 

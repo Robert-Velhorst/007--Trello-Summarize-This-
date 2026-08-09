@@ -1,7 +1,7 @@
 const http = require("node:http");
 const config = require("./backend-config");
 const { createBackendApp } = require("./backend-app");
-const { normalizeBackendStoreOptions } = require("./backend-storage");
+const { normalizeBackendStoreOptions, resolveBackendStoreType } = require("./backend-storage");
 const { processWorkerCycle } = require("./backend-worker");
 const { acquireRuntimeLock } = require("./backend-lock");
 
@@ -35,7 +35,9 @@ async function startBackendServer(options = {}) {
     throw error;
   }
 
-  const runtimeLock = await acquireRuntimeLock(normalizedOptions.filePath, "backend server");
+  const runtimeLock = resolveBackendStoreType(normalizedOptions) === "local"
+    ? await acquireRuntimeLock(normalizedOptions.filePath, "backend server")
+    : { release: async () => {} };
   try {
     const app = await createBackendApp(normalizedOptions);
     const workerTimer = startIntegratedWorker(app.store, normalizedOptions);
@@ -49,7 +51,9 @@ async function startBackendServer(options = {}) {
     return await new Promise((resolve, reject) => {
       server.on("close", () => {
         if (workerTimer) clearInterval(workerTimer);
-        runtimeLock.release().catch((error) => console.error(`Could not release runtime lock: ${error.message}`));
+        Promise.resolve(app.store && typeof app.store.close === "function" ? app.store.close() : null)
+          .then(() => runtimeLock.release())
+          .catch((error) => console.error(`Could not close backend runtime: ${error.message}`));
       });
       server.once("error", (error) => {
         runtimeLock.release().finally(() => reject(error));
@@ -69,6 +73,9 @@ if (require.main === module) {
   startBackendServer().then(({ server }) => {
     const address = server.address();
     console.log(`Summarize This backend listening on http://${address.address}:${address.port}/api/health`);
+    const shutdown = () => server.close(() => process.exit(0));
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
   }).catch((error) => {
     console.error(error.message);
     process.exit(1);

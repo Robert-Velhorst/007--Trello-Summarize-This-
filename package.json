@@ -1,6 +1,6 @@
 {
   "name": "summarize-this-trello-powerup",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "private": true,
   "main": "index.js",
   "description": "Static Trello Power-Up for AI-assisted card summarization.",
@@ -22,11 +22,22 @@
     "test:operations": "node operations.test.js",
     "test:e2e": "node e2e.test.js",
     "test:large": "node large-dataset.test.js",
-    "test:all": "node test.js && node backend.test.js && node operations.test.js && node e2e.test.js && node large-dataset.test.js && node adversarial.test.js && node evaluation.test.js",
+    "test:static": "node static-site.test.js",
+    "test:postgres": "node postgres.test.js",
+    "test:all": "node test.js && node static-site.test.js && node backend.test.js && node operations.test.js && node e2e.test.js && node large-dataset.test.js && node postgres.test.js && node adversarial.test.js && node evaluation.test.js",
     "evaluate:labeled": "node tools/evaluate-labeled-summaries.js",
     "flags": "node -e \"const f=require('./feature-flags'); f.getAllFlags().forEach(fl=>console.log((fl.effectiveValue?'[ON] ':'[OFF]')+fl.key+' - '+fl.description))\"",
     "analyze:resources": "node tools/resource-analysis.js",
+    "build:static": "node tools/build-static-site.js",
+    "build:windows-backend": "pkg backend-server.js --targets node22-win-x64 --output dist/windows-backend/SummarizeThisBackend.exe --compress GZip",
+    "test:windows-payload": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/windows/build-installer.ps1 -PayloadInspectionPath .tmp/installer-payload",
     "build:windows-installer": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/windows/build-installer.ps1"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.22.0"
+  }
 }

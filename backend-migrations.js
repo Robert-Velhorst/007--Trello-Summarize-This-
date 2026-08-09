@@ -1,6 +1,6 @@
 "use strict";
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 const COLLECTIONS = [
   "users",
   "sessions",
@@ -21,7 +21,8 @@ const COLLECTIONS = [
   "memberships",
   "reminders",
   "notifications",
-  "analyticsEvents"
+  "analyticsEvents",
+  "haiTokens"
 ];
 
 function clone(value) {
@@ -54,7 +55,7 @@ function createInitialState() {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       createdAt,
       updatedAt: createdAt,
-      appliedMigrations: [1, 2, 3, 4]
+      appliedMigrations: [1, 2, 3, 4, 5]
     },
     settings: baseSettings()
   };
@@ -138,10 +139,22 @@ function migrateThreeToFour(state) {
   return state;
 }
 
+function migrateFourToFive(state) {
+  ensureCollections(state);
+  state.summaries.forEach((summary) => {
+    summary.reviewedAt = summary.reviewedAt || null;
+    summary.haiApprovedAt = summary.haiApprovedAt || null;
+  });
+  state.meta.schemaVersion = 5;
+  state.meta.appliedMigrations.push(5);
+  return state;
+}
+
 const MIGRATIONS = {
   1: migrateOneToTwo,
   2: migrateTwoToThree,
-  3: migrateThreeToFour
+  3: migrateThreeToFour,
+  4: migrateFourToFive
 };
 
 function validateState(input) {

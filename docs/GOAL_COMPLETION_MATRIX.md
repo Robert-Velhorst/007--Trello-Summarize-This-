@@ -1,6 +1,6 @@
 # Goal Completion Matrix
 
-Date: 2026-08-08 (giant-prompt implementation pass)
+Date: 2026-08-09 (production wiring and release pass)
 Previous: 2026-07-12
 
 | Area | Status | Notes |
@@ -19,7 +19,9 @@ Previous: 2026-07-12
 | PDF/Word/Excel/image OCR extraction | Partial | Bounded extraction code exists where browser libraries are available; unsupported runtimes fail honestly to metadata-only |
 | Batch execution | Implemented (local reviewed scope) | Explicit source text can run in the durable local worker; results stop at review-required and never fetch/write Trello unattended |
 | Trello description writeback | Implemented (local code; live verification pending) | Editable replacement draft, explicit approval/confirmation, source-freshness check, and pending/ambiguous attempt safety are wired in `popup.html`; live Trello verification is required before production use |
-| Production-ready backend/admin subsystem | Partial | Hardened single-instance backend has async scrypt auth, workspaces/RBAC, migrations, runtime lock, worker, backups, reconciliation, support bundle, Docker, and tests. A production database/TLS/managed secrets are still external gates. |
+| Production backend/admin subsystem | Implemented (single-writer scope) | Async scrypt auth, workspaces/RBAC, worker, PostgreSQL or local persistence, health/readiness, backups, reconciliation, support bundle, Docker, and tests. Horizontal multi-writer scaling remains outside this release. |
+| Frontend/backend account connection | Implemented | Settings can check health, register, sign in, sign out, and store only the session token in member-private storage; passwords remain transient. |
+| HAI connector | Implemented (live HAI authorization pending) | Per-user revocable capability URL, HMAC-only token storage, stable cursor, and explicit per-summary HAI approval. Live source creation remains under HAI owner authentication. |
 | Backend payment and webhook processing | Missing | Purchase and Stripe webhook routes deliberately return an explicit unavailable response until verified signatures, reconciliation, and provider integration exist; no credits are granted from client input. |
 | Backend local batch worker | Implemented | `/run` only enqueues explicitly approved local-worker jobs with explicit source text; output is deterministic and review-required. Manual/Trello-fetch jobs remain blocked. |
 | Search/filter/pagination | Implemented | Bounded query parameters are covered against a 5,000-user dataset. |
@@ -39,5 +41,6 @@ Previous: 2026-07-12
 | Doctor self-diagnostics | Implemented | `node doctor.js` (39 checks) and `node backend-doctor.js` |
 | Custom prompt templates | Implemented | Template CRUD, selection, and per-template instructions |
 | Dark mode support | Implemented | System dark mode via prefers-color-scheme in popup and settings |
-| Windows installer | Implemented | PowerShell-based build, install, uninstall, and launcher scripts |
-| Docker deployment artifacts | Implemented (local scope) | Non-root image, health check, loopback Compose binding, dropped capabilities, persistent volume, and integrated worker |
+| Windows installer | Implemented and acceptance-tested | Single `.exe`, bundled Node 22 backend, generated ACL-protected secrets, loopback local database, Start menu launchers, ngrok launcher, and verified uninstall. No Node, Docker, or admin rights required. |
+| Docker deployment artifacts | Implemented (single-instance production scope) | Non-root image, PostgreSQL 17, health checks, loopback binding, dropped capabilities, named volumes, bounded pool, and integrated worker. |
+| GitHub Pages deployment | Implemented in repository | Allowlisted 24-file static build and Pages workflow. Live deployment from `main` remains a release action. |

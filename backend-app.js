@@ -56,6 +56,29 @@ function scryptRecord(password, salt) {
   });
 }
 
+function haiTokenHash(token) {
+  return crypto.createHmac("sha256", String(config.JWT_SECRET || ""))
+    .update(`hai-connector:${String(token || "")}`)
+    .digest("hex");
+}
+
+function sanitizeTrelloSourceUri(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "trello.com") return "";
+    if (!/^\/c\/[A-Za-z0-9]+(?:\/[^/?#]*)?$/.test(parsed.pathname)) return "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function connectorCursor(summary) {
+  return `${String(summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+}
+
 async function verifyPassword(password, record) {
   if (!record || !record.hash || !record.salt) return false;
   const candidate = await scryptRecord(password, record.salt);
@@ -367,6 +390,36 @@ function buildBatchJob(body) {
   };
 }
 
+function validateReviewedSummaryPayload(payload) {
+  if (!payload || payload.reviewed !== true) return "Saving requires reviewed=true after the exact summary has been reviewed.";
+  const title = String(payload.title || "").trim();
+  const content = String(payload.content || "").trim();
+  if (!title) return "A summary title is required.";
+  if (!content) return "Summary content is required.";
+  if (title.length > 300) return "Summary title must contain no more than 300 characters.";
+  if (content.length > 100_000) return "Summary content must contain no more than 100000 characters.";
+  if (payload.sourceUri && !sanitizeTrelloSourceUri(payload.sourceUri)) return "Only a normal https://trello.com/c/... source link is accepted.";
+  return "";
+}
+
+function cleanSummaryForUser(summary) {
+  return {
+    id: summary.id,
+    title: summary.title || "Reviewed Trello summary",
+    summary: summary.summary,
+    sourceUri: summary.sourceUri || "",
+    cardId: summary.cardId || "",
+    runId: summary.runId || "",
+    method: summary.method,
+    providerMode: summary.providerMode,
+    confidence: summary.confidence,
+    reviewedAt: summary.reviewedAt || null,
+    haiApprovedAt: summary.haiApprovedAt || null,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt
+  };
+}
+
 async function workspaceAccess(store, userId, workspaceId) {
   const membership = (await store.list("memberships")).find((item) => item.userId === userId && item.workspaceId === workspaceId);
   return membership || null;
@@ -437,11 +490,17 @@ async function route(req, res, store) {
 
   if (req.method === "GET" && pathname === "/api/health") {
     const snapshot = await store.snapshot();
-    json(res, 200, {
-      status: "ok",
+    const storageHealth = typeof store.databaseHealth === "function"
+      ? await store.databaseHealth().catch((error) => ({ ok: false, kind: "postgres", error: error.message }))
+      : { ok: true, kind: "local" };
+    json(res, storageHealth.ok ? 200 : 503, {
+      status: storageHealth.ok ? "ok" : "degraded",
       service: "summarize-this-backend",
+      version: require("./package.json").version,
       timestamp: nowIso(),
       storage: {
+        kind: storageHealth.kind,
+        latencyMs: storageHealth.latencyMs,
         users: snapshot.users.length,
         sessions: snapshot.sessions.filter((item) => isActiveSession(item)).length,
         batchJobs: snapshot.batchJobs.length
@@ -454,10 +513,15 @@ async function route(req, res, store) {
 
   if (req.method === "GET" && pathname === "/api/readiness") {
     const readiness = config.backendReadiness();
-    json(res, readiness.ok ? 200 : 503, {
-      status: readiness.ok ? "ready" : "blocked",
+    const storageHealth = typeof store.databaseHealth === "function"
+      ? await store.databaseHealth().catch((error) => ({ ok: false, kind: "postgres", error: error.message }))
+      : { ok: true, kind: "local" };
+    const ready = readiness.ok && storageHealth.ok;
+    json(res, ready ? 200 : 503, {
+      status: ready ? "ready" : "blocked",
       missing: readiness.missing,
-      optional: readiness.optional
+      optional: readiness.optional,
+      storage: storageHealth
     });
     return;
   }
@@ -598,6 +662,53 @@ async function route(req, res, store) {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
     json(res, 200, { success: true, user: cleanUser(context.user) });
+    return;
+  }
+
+  const haiFeedMatch = pathname.match(/^\/api\/integrations\/hai\/feed\/(hai_[A-Za-z0-9_-]{32,})$/);
+  if (req.method === "GET" && haiFeedMatch) {
+    if (!config.HAI_CONNECTOR_ENABLED) {
+      text(res, 404, "Not Found");
+      return;
+    }
+    const connectorHash = haiTokenHash(haiFeedMatch[1]);
+    const token = (await store.list("haiTokens")).find((item) => item.tokenHash === connectorHash && !item.revokedAt);
+    if (!token) {
+      text(res, 404, "Not Found");
+      return;
+    }
+    const limitResult = await checkRateLimit(store, "hai.feed", token.userId, 120, 60 * 60_000);
+    if (!limitResult.ok) {
+      json(res, 429, { error: "HAI feed rate limit exceeded", retryAfterSeconds: limitResult.retryAfterSeconds });
+      return;
+    }
+    const cursor = String(requestUrl.searchParams.get("cursor") || "").slice(0, 300);
+    const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 50) || 50));
+    const approved = (await store.list("summaries"))
+      .filter((item) => item.userId === token.userId && item.haiApprovedAt && connectorCursor(item) > cursor)
+      .sort((left, right) => connectorCursor(left).localeCompare(connectorCursor(right)))
+      .slice(0, limit);
+    const items = approved.map((item) => ({
+      externalId: `summarize-this:${item.id}`,
+      title: String(item.title || "Reviewed Trello summary").slice(0, 300),
+      content: String(item.summary || "").slice(0, 100_000),
+      sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
+      itemType: "trello-card-summary",
+      projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
+      metadata: JSON.stringify({
+        reviewedAt: item.reviewedAt || null,
+        haiApprovedAt: item.haiApprovedAt,
+        method: item.method || "reviewed-import",
+        providerMode: item.providerMode || "local"
+      })
+    }));
+    await store.updateRecord("haiTokens", token.id, (record) => {
+      record.lastUsedAt = nowIso();
+    });
+    json(res, 200, {
+      items,
+      nextCursor: approved.length ? connectorCursor(approved[approved.length - 1]) : cursor
+    });
     return;
   }
 
@@ -748,6 +859,163 @@ async function route(req, res, store) {
       return { status: 201, payload: { success: true, job } };
     });
     json(res, response.status, response.payload);
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/summaries") {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    const summaries = (await store.list("summaries")).filter((item) => item.userId === context.user.id);
+    const result = queryCollection(summaries, requestUrl.searchParams, ["id", "title", "cardId", "runId"]);
+    json(res, 200, Object.assign({ success: true, summaries: result.items.map(cleanSummaryForUser) }, result));
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/summaries/reviewed") {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    const limited = await checkRateLimit(store, "summaries.reviewed", context.user.id, 60, 60 * 60_000);
+    if (!limited.ok) {
+      json(res, 429, { success: false, error: "Reviewed-summary rate limit exceeded", retryAfterSeconds: limited.retryAfterSeconds });
+      return;
+    }
+    const body = await readBody(req);
+    const validationError = validateReviewedSummaryPayload(body);
+    if (validationError) {
+      json(res, 400, { success: false, error: validationError });
+      return;
+    }
+    const sourceUri = sanitizeTrelloSourceUri(body.sourceUri);
+    const runId = String(body.runId || "").trim().slice(0, 160);
+    const response = await withIdempotency(req, store, `reviewed-summary:${context.user.id}`, async () => {
+      const existing = runId
+        ? (await store.list("summaries")).find((item) => item.userId === context.user.id && item.runId === runId)
+        : null;
+      if (existing) {
+        const updated = body.haiApproved === true && !existing.haiApprovedAt
+          ? await store.updateRecord("summaries", existing.id, (record) => { record.haiApprovedAt = nowIso(); })
+          : existing;
+        return { status: 200, payload: { success: true, summary: cleanSummaryForUser(updated), existing: true } };
+      }
+      const summary = await store.add("summaries", {
+        id: createId("summary"),
+        userId: context.user.id,
+        workspaceId: context.user.workspaceId,
+        title: String(body.title).trim().slice(0, 300),
+        summary: String(body.content).trim().slice(0, 100_000),
+        sourceUri,
+        cardId: String(body.cardId || "").trim().slice(0, 160),
+        runId,
+        projectKey: String(body.projectKey || "trello-summaries").trim().slice(0, 120),
+        method: "reviewed-import",
+        providerMode: String(body.providerMode || "local").trim().slice(0, 80),
+        confidence: Math.max(0, Math.min(1, Number(body.confidence || 0))),
+        reviewedAt: nowIso(),
+        haiApprovedAt: body.haiApproved === true ? nowIso() : null,
+        creditsUsed: 0
+      }, { limit: 1000 });
+      await appendEvent(store, "summary.reviewed_saved", {
+        userId: context.user.id,
+        summaryId: summary.id,
+        haiApproved: Boolean(summary.haiApprovedAt)
+      });
+      return { status: 201, payload: { success: true, summary: cleanSummaryForUser(summary) } };
+    });
+    json(res, response.status, response.payload);
+    return;
+  }
+
+  const haiApprovalMatch = pathname.match(/^\/api\/summaries\/([^/]+)\/hai-approval$/);
+  if (req.method === "POST" && haiApprovalMatch) {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    const body = await readBody(req);
+    if (typeof body.approved !== "boolean") {
+      json(res, 400, { success: false, error: "approved must be true or false" });
+      return;
+    }
+    const summary = (await store.list("summaries")).find((item) => item.id === haiApprovalMatch[1] && item.userId === context.user.id);
+    if (!summary) {
+      json(res, 404, { success: false, error: "Summary not found" });
+      return;
+    }
+    const updated = await store.updateRecord("summaries", summary.id, (record) => {
+      record.haiApprovedAt = body.approved ? nowIso() : null;
+    });
+    await appendEvent(store, body.approved ? "summary.hai_approved" : "summary.hai_revoked", {
+      userId: context.user.id,
+      summaryId: summary.id
+    });
+    json(res, 200, { success: true, summary: cleanSummaryForUser(updated) });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/integrations/hai/status") {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    const active = (await store.list("haiTokens")).find((item) => item.userId === context.user.id && !item.revokedAt);
+    const approvedCount = (await store.list("summaries")).filter((item) => item.userId === context.user.id && item.haiApprovedAt).length;
+    json(res, 200, {
+      success: true,
+      enabled: config.HAI_CONNECTOR_ENABLED,
+      configured: Boolean(active),
+      createdAt: active ? active.createdAt : null,
+      lastUsedAt: active ? active.lastUsedAt || null : null,
+      approvedSummaryCount: approvedCount
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/integrations/hai/token") {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    if (!config.HAI_CONNECTOR_ENABLED) {
+      json(res, 503, { success: false, error: "The HAI connector is disabled on this backend." });
+      return;
+    }
+    const rawToken = `hai_${crypto.randomBytes(32).toString("base64url")}`;
+    const records = await store.list("haiTokens");
+    records.forEach((item) => {
+      if (item.userId === context.user.id && !item.revokedAt) {
+        item.revokedAt = nowIso();
+        item.updatedAt = item.revokedAt;
+      }
+    });
+    records.unshift({
+      id: createId("hai-token"),
+      userId: context.user.id,
+      tokenHash: haiTokenHash(rawToken),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      revokedAt: null,
+      lastUsedAt: null
+    });
+    await store.replace("haiTokens", records.slice(0, 1000));
+    await appendEvent(store, "hai.connector_token_rotated", { userId: context.user.id });
+    json(res, 201, {
+      success: true,
+      token: rawToken,
+      feedPath: `/api/integrations/hai/feed/${rawToken}`,
+      warning: "This capability URL is shown once. Anyone who has it can read only your HAI-approved summaries until you rotate or revoke it."
+    });
+    return;
+  }
+
+  if (req.method === "DELETE" && pathname === "/api/integrations/hai/token") {
+    const context = await requireSession(store, req, res, "user");
+    if (!context) return;
+    const records = await store.list("haiTokens");
+    let revoked = 0;
+    records.forEach((item) => {
+      if (item.userId === context.user.id && !item.revokedAt) {
+        item.revokedAt = nowIso();
+        item.updatedAt = item.revokedAt;
+        revoked += 1;
+      }
+    });
+    await store.replace("haiTokens", records);
+    await appendEvent(store, "hai.connector_token_revoked", { userId: context.user.id, revoked });
+    json(res, 200, { success: true, revoked });
     return;
   }
 
@@ -1673,7 +1941,9 @@ async function createBackendApp(options = {}) {
   const normalizedOptions = normalizeBackendStoreOptions(options);
   const store = normalizedOptions.store || await createBackendStore({
     storeType: normalizedOptions.storeType,
-    filePath: normalizedOptions.filePath
+    filePath: normalizedOptions.filePath,
+    databaseUrl: normalizedOptions.databaseUrl,
+    postgresTable: normalizedOptions.postgresTable
   });
 
   const readiness = config.backendReadiness();

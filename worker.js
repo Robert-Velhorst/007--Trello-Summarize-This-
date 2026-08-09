@@ -1,6 +1,6 @@
 "use strict";
 
-const { createBackendStore, resolveBackendFilePath } = require("./backend-storage");
+const { createBackendStore, resolveBackendFilePath, resolveBackendStoreType } = require("./backend-storage");
 const { processWorkerCycle } = require("./backend-worker");
 const { acquireRuntimeLock } = require("./backend-lock");
 
@@ -11,7 +11,9 @@ let runtimeLock = null;
 let stopping = false;
 
 async function acquireLock() {
-  runtimeLock = await acquireRuntimeLock(filePath, "standalone worker");
+  runtimeLock = resolveBackendStoreType({}) === "local"
+    ? await acquireRuntimeLock(filePath, "standalone worker")
+    : { release: async () => {} };
 }
 
 async function releaseLock() {
@@ -22,12 +24,16 @@ async function releaseLock() {
 async function run() {
   await acquireLock();
   const store = await createBackendStore({ filePath });
-  do {
-    const result = await processWorkerCycle(store);
-    console.log(JSON.stringify({ timestamp: new Date().toISOString(), result }));
-    if (once) break;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  } while (!stopping);
+  try {
+    do {
+      const result = await processWorkerCycle(store);
+      console.log(JSON.stringify({ timestamp: new Date().toISOString(), result }));
+      if (once) break;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    } while (!stopping);
+  } finally {
+    if (typeof store.close === "function") await store.close();
+  }
 }
 
 async function stop() {

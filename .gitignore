@@ -1,5 +1,9 @@
 .npm-cache/
+node_modules/
+.playwright-cli/
 .tmp/
 proxy/.dev.vars
 database/runtime/
 .env
+dist/static-site/
+dist/windows-backend/

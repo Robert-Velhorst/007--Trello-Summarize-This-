@@ -2,7 +2,7 @@
 "use strict";
 
 const config = require("./backend-config");
-const { createBackendStore, resolveBackendFilePath } = require("./backend-storage");
+const { createBackendStore, resolveBackendFilePath, resolveBackendStoreType } = require("./backend-storage");
 const { buildSupportBundle } = require("./backend-support");
 const { processWorkerCycle } = require("./backend-worker");
 const { acquireRuntimeLock } = require("./backend-lock");
@@ -14,9 +14,12 @@ function print(value) {
 async function main(argv = process.argv.slice(2)) {
   const command = argv[0] || "status";
   const filePath = resolveBackendFilePath({ filePath: process.env.BACKEND_STORE_PATH });
-  const runtimeLock = await acquireRuntimeLock(filePath, `operator CLI (${command})`);
+  const runtimeLock = resolveBackendStoreType({}) === "local"
+    ? await acquireRuntimeLock(filePath, `operator CLI (${command})`)
+    : { release: async () => {} };
+  let store = null;
   try {
-  const store = await createBackendStore({ filePath });
+  store = await createBackendStore({ filePath });
   if (command === "status") {
     const snapshot = await store.snapshot();
     print({ schema: await store.schemaInfo(), readiness: config.backendReadiness(), counts: Object.fromEntries(Object.entries(snapshot).filter(([, value]) => Array.isArray(value)).map(([key, value]) => [key, value.length])) });
@@ -52,6 +55,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   throw new Error(`Unknown command: ${command}`);
   } finally {
+    if (store && typeof store.close === "function") await store.close();
     await runtimeLock.release();
   }
 }

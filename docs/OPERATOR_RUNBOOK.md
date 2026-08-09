@@ -1,12 +1,23 @@
 # Operator Runbook
 
-Date: 2026-08-08
+Date: 2026-08-09
 
 ## How to Run Locally
 
+### Windows 11 Installed App
+
+Run `SummarizeThisSetup.exe`, then use the Start menu shortcuts:
+
+- **Summarize This** starts the bundled backend and local UI.
+- **Configure Trello Power-Up** opens the setup assistant.
+- **Share Backend with ngrok** starts an explicit HTTPS tunnel after checking the backend. ngrok must already be installed and authorized.
+- **Uninstall Summarize This** stops the exact installed backend process and removes the per-user installation.
+
+The installed backend listens at `http://127.0.0.1:18787/api`; its generated secrets and local store stay under the current user's LocalAppData installation folder.
+
 ### Prerequisites
 
-- Node.js >= 18 (verified: v20.20.2)
+- Node.js 20 or 22 for repository development and CI
 - No other dependencies required for the static Power-Up
 
 ### Start the Static Power-Up Server
@@ -51,13 +62,17 @@ npm run start:backend
 | `RUN_WORKER` | Recommended | `true` runs reminders and approved local batch jobs inside the single backend process |
 | `WORKER_INTERVAL_MS` | Optional | Worker interval, minimum 1000 ms; default 5000 ms |
 | `BACKEND_STORE_PATH` | Optional | Absolute or working-directory-relative JSON store path; backend, worker, and CLI must use the same value |
-| `DATABASE_URL` | Ignored | No PostgreSQL store is implemented; the backend always uses its local JSON runtime store. Do not treat this variable as database enablement. |
+| `BACKEND_STORE` | Optional | `local` or `postgres`; a configured `DATABASE_URL` selects PostgreSQL when no explicit local file path is supplied |
+| `DATABASE_URL` | Required for PostgreSQL | PostgreSQL connection URL; keep credentials in managed environment secrets |
+| `DB_POOL_MAX` | Optional | PostgreSQL pool size, bounded to 1-20; default 4 |
+| `DATABASE_SSL` | Optional | `true` enables PostgreSQL TLS; certificate verification is on unless explicitly disabled |
+| `HAI_CONNECTOR_ENABLED` | Optional | `true` enables per-user read-only HAI feeds; default false on server deployments |
 | `STRIPE_SECRET_KEY` | Not active | Reserved for a future verified Stripe integration; purchases remain disabled |
 | `STRIPE_WEBHOOK_SECRET` | Not active | Reserved for a future verified Stripe integration; webhooks remain disabled |
 
 ## How to Run Migrations
 
-Schema migrations run automatically and fail closed on unsupported future versions. Offline commands require the backend to be stopped because all processes share an exclusive runtime lock.
+Schema migrations run automatically and fail closed on unsupported future versions. The local store uses a file lock; PostgreSQL uses an advisory writer lock. Offline commands require the active backend writer to be stopped.
 
 ```bash
 npm run backend:status
@@ -90,6 +105,7 @@ node backend.test.js  # Backend API contract tests
 node operations.test.js # Migrations, worker, backup, repair, redaction, locking
 node e2e.test.js       # Real HTTP critical path
 node large-dataset.test.js # 5,000-user search/pagination
+node postgres.test.js   # PostgreSQL persistence/restart/writer exclusion when TEST_DATABASE_URL is set
 node evaluation.test.js # Labeled evaluation harness
 ```
 
@@ -127,11 +143,8 @@ node test.js
 
 ## How to Deploy (Static Power-Up)
 
-1. Host all `.html`, `.js`, `.css`, `.svg`, `.json` files at a public HTTPS URL
-2. Configure `trello-config.js` with your Trello app key:
-   ```js
-   window.SummarizeThisTrelloConfig = { appKey: "your-trello-app-key" };
-   ```
+1. Run `npm run build:static`; deploy only the generated `dist/static-site` artifact.
+2. Keep `runtime-files.json` as the source allowlist and configure the public Trello app key in `trello-config.js`.
 3. Register the Power-Up at https://trello.com/power-ups/admin with:
    - Connector URL: `https://your-host/connector.html`
    - Capabilities: card-buttons, card-detail-badges, show-settings, authorization-status, show-authorization
@@ -151,12 +164,12 @@ See `proxy/README.md` for full instructions.
 
 ```bash
 cp .env.example .env
-# Replace JWT_SECRET and ADMIN_PASSWORD.
+# Replace JWT_SECRET, ADMIN_PASSWORD, and POSTGRES_PASSWORD.
 docker compose up --build -d
 docker compose ps
 ```
 
-Compose binds to `127.0.0.1:8787`, runs as a non-root user with dropped capabilities, stores state in a named volume, and runs the worker inside the backend process. Add owner-controlled TLS ingress before exposing it beyond the local machine.
+Compose binds the backend to `127.0.0.1:8787`, runs PostgreSQL 17 without a host port, uses a bounded backend pool, runs as a non-root user with dropped capabilities, stores state in named volumes, and runs the worker inside the backend process. Add owner-controlled TLS ingress before exposing it beyond the local machine.
 
 ## Security Warnings
 
@@ -167,9 +180,9 @@ Compose binds to `127.0.0.1:8787`, runs as a non-root user with dropped capabili
 
 ## Known Limitations
 
-1. Backend uses a local JSON runtime store by default; it is not a production database or a multi-instance deployment.
+1. Desktop uses a local JSON store; server deployments support PostgreSQL but deliberately allow one active writer.
 2. User passwords use asynchronous scrypt, but admin authentication still relies on environment credentials.
-3. The runtime lock deliberately limits the JSON backend to one process; scale-out requires a production database and queue.
+3. Local file and PostgreSQL advisory locks deliberately limit the release to one writer; scale-out requires normalized transactional tables and distributed coordination.
 4. Binary attachment extraction depends on browser library availability and otherwise falls back honestly to metadata.
 5. Local worker execution requires explicit source text and approval, stops at review-required, and never fetches or writes Trello.
 6. Trello description replacement is wired with explicit approval and source-freshness checks, but requires live Trello verification before production use.

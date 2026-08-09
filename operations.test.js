@@ -24,7 +24,7 @@ async function main() {
   const migrated = await createBackendStore({ filePath: migrationPath });
   const schema = await migrated.schemaInfo();
   assert.equal(schema.storedVersion, CURRENT_SCHEMA_VERSION);
-  assert.deepEqual(schema.appliedMigrations, [1, 2, 3, 4]);
+  assert.deepEqual(schema.appliedMigrations, [1, 2, 3, 4, 5]);
   assert.equal((await migrated.list("workspaces")).length, 1);
   assert.equal((await migrated.list("memberships"))[0].role, "owner");
 

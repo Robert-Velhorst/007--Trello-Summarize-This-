@@ -292,7 +292,7 @@
       instruction: "Write all user-facing summary values in Dutch."
     }
   };
-  var APP_VERSION = "1.0.4";
+  var APP_VERSION = "1.1.0";
   var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json";
   var UPDATE_REPO_URL_PREFIX = "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-";
 
@@ -2086,6 +2086,12 @@
     } catch (error) {
       return "";
     }
+  }
+
+  function isAllowedLocalProxyUrl(parsed) {
+    if (!parsed || parsed.protocol !== "http:") return false;
+    var host = String(parsed.hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0:0:0:0:0:0:0:1";
   }
 
   function isPrivateOrLocalHostname(hostname) {

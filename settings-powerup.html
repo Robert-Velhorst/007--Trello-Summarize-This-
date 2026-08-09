@@ -442,7 +442,43 @@
       <div class="group">
         <label for="backendSessionToken">Backend session token</label>
         <input id="backendSessionToken" type="password" autocomplete="off" placeholder="st_...">
-        <p class="help">Optional. Stored in member-private Power-Up storage and used only for authenticated backend batch execution.</p>
+        <p class="help">Advanced fallback. Signing in below fills and stores this securely in member-private Power-Up storage.</p>
+      </div>
+
+      <div class="group">
+        <label for="backendEmail">Backend account email</label>
+        <input id="backendEmail" type="email" autocomplete="username" placeholder="you@example.com">
+      </div>
+
+      <div class="group">
+        <label for="backendName">Name for a new account</label>
+        <input id="backendName" type="text" autocomplete="name" maxlength="120" placeholder="Your name">
+      </div>
+
+      <div class="group">
+        <label for="backendPassword">Backend account password</label>
+        <input id="backendPassword" type="password" autocomplete="current-password" maxlength="256" placeholder="At least 12 characters">
+        <p class="help">The password is sent only to your configured backend and is never saved in Trello or local settings.</p>
+        <div class="field-actions">
+          <button id="testBackendButton" class="secondary" type="button">Check connection</button>
+          <button id="registerBackendButton" class="secondary" type="button">Create account</button>
+          <button id="loginBackendButton" class="secondary" type="button">Sign in</button>
+          <button id="logoutBackendButton" class="secondary" type="button">Sign out</button>
+        </div>
+        <span id="backendStatus" class="status" aria-live="polite"></span>
+      </div>
+
+      <div class="group">
+        <label for="haiConnectorUrl">HAI connector URL</label>
+        <input id="haiConnectorUrl" type="password" readonly autocomplete="off" placeholder="Generate after signing in">
+        <p class="warning">This URL can read only summaries you explicitly approve for HAI. It is shown once; treat it like a password and rotate it if exposed.</p>
+        <div class="field-actions">
+          <button id="generateHaiConnectorButton" class="secondary" type="button">Generate or rotate URL</button>
+          <button id="showHaiConnectorButton" class="secondary" type="button">Show or hide URL</button>
+          <button id="copyHaiConnectorButton" class="secondary" type="button">Copy URL</button>
+          <button id="revokeHaiConnectorButton" class="secondary" type="button">Revoke URL</button>
+        </div>
+        <span id="haiStatus" class="status" aria-live="polite"></span>
       </div>
     </section>
 
@@ -527,7 +563,7 @@
     </div>
   </div>
 
-  <script src="./summarizer-core.js"></script>
+  <script src="./summarizer-core.js?v=20260809.1"></script>
   <script>
     /* global TrelloPowerUp, SummarizeThis */
 
@@ -540,30 +576,9 @@
         window.self !== window.top
       );
       var t = inTrello ? window.TrelloPowerUp.iframe() : null;
+      var pageParams = new URLSearchParams(window.location.search || "");
+      var installedMode = pageParams.get("installed") === "1" || pageParams.get("localPreview") === "1";
       
-      window.trimSummarizeThisHistory = async function () {
-        console.log("[SummarizeThis TRIM] starting...");
-        if (!t) {
-          console.log("[SummarizeThis TRIM] t is null -- not running inside Trello iframe context.");
-          return;
-        }
-        try {
-          var r1 = await t.remove("member", "private", "analysisHistory");
-          console.log("[SummarizeThis TRIM] removed analysisHistory:", r1);
-        } catch (e) {
-          console.log("[SummarizeThis TRIM] error removing analysisHistory:", e);
-        }
-        try {
-          var r2 = await t.remove("member", "private", "summarizeThisPerformanceRecords");
-          console.log("[SummarizeThis TRIM] removed summarizeThisPerformanceRecords:", r2);
-        } catch (e) {
-          console.log("[SummarizeThis TRIM] error removing summarizeThisPerformanceRecords:", e);
-        }
-        console.log("[SummarizeThis TRIM] done. This frees up storage. Try Save settings again now.");
-      };
-      
-      console.log("[SummarizeThis TRIM] trimSummarizeThisHistory() is now available -- call it from the console.");
- 
       var promptTemplates = [];
       var fields = {
         analysisMode: document.getElementById("analysisMode"),
@@ -587,6 +602,12 @@
         proxyEndpoint: document.getElementById("proxyEndpoint"),
         backendApiBase: document.getElementById("backendApiBase"),
         backendSessionToken: document.getElementById("backendSessionToken"),
+        backendEmail: document.getElementById("backendEmail"),
+        backendName: document.getElementById("backendName"),
+        backendPassword: document.getElementById("backendPassword"),
+        backendStatus: document.getElementById("backendStatus"),
+        haiConnectorUrl: document.getElementById("haiConnectorUrl"),
+        haiStatus: document.getElementById("haiStatus"),
         budgetWarningPercent: document.getElementById("budgetWarningPercent"),
         openaiMonthlyLimit: document.getElementById("openaiMonthlyLimit"),
         googleMonthlyLimit: document.getElementById("googleMonthlyLimit"),
@@ -616,6 +637,14 @@
       document.getElementById("testAnthropicButton").addEventListener("click", function () {
         testProvider("anthropic");
       });
+      document.getElementById("testBackendButton").addEventListener("click", testBackendConnection);
+      document.getElementById("registerBackendButton").addEventListener("click", registerBackendAccount);
+      document.getElementById("loginBackendButton").addEventListener("click", loginBackendAccount);
+      document.getElementById("logoutBackendButton").addEventListener("click", logoutBackendAccount);
+      document.getElementById("generateHaiConnectorButton").addEventListener("click", generateHaiConnector);
+      document.getElementById("showHaiConnectorButton").addEventListener("click", toggleHaiConnectorVisibility);
+      document.getElementById("copyHaiConnectorButton").addEventListener("click", copyHaiConnector);
+      document.getElementById("revokeHaiConnectorButton").addEventListener("click", revokeHaiConnector);
       document.addEventListener("DOMContentLoaded", loadSettings);
 
       async function loadSettings() {
@@ -650,8 +679,11 @@
         fields.useProxy.checked = proxySettings.enabled;
         fields.proxyEndpoint.value = proxySettings.endpoint;
         var backendSettings = SummarizeThis.normalizeBackendSettings(settings.backend, settings.proxy);
-        fields.backendApiBase.value = backendSettings.derivedFromProxy ? "" : backendSettings.apiBase;
+        fields.backendApiBase.value = backendSettings.derivedFromProxy
+          ? ""
+          : (backendSettings.apiBase || (installedMode ? "http://127.0.0.1:18787/api" : ""));
         fields.backendSessionToken.value = await readBackendSessionToken();
+        fields.backendStatus.textContent = fields.backendSessionToken.value ? "A backend session is saved." : "Not signed in.";
         var budget = SummarizeThis.normalizeBudgetSettings(settings.budget);
         fields.budgetWarningPercent.value = String(budget.warningPercent);
         fields.openaiMonthlyLimit.value = budget.providerMonthlyLimits.openai ? String(budget.providerMonthlyLimits.openai) : "";
@@ -782,19 +814,8 @@
           updatedAt: new Date().toISOString()
         };
       }
-      // ============================================================
-// TEMPORARY DEBUG VERSION of saveSettings() in settings-powerup.html
-// ============================================================
-// Add console.log tracing at every step to find exactly where
-// execution stops (or if the function runs at all).
-// ============================================================
-
       async function saveSettings(options) {
-        console.log("[SummarizeThis DEBUG] saveSettings() called");
-
         var settings = buildSettings();
-        console.log("[SummarizeThis DEBUG] buildSettings() returned:", settings);
-
         var closeAfterSave = !(options && options.keepOpen);
         var successMessage = options && options.successMessage ? options.successMessage : "Settings saved.";
 
@@ -803,7 +824,6 @@
         });
 
         if (fields.useProxy.checked && !settings.proxy.valid) {
-          console.log("[SummarizeThis DEBUG] blocked: proxy invalid:", settings.proxy.error);
           showMessage(settings.proxy.error, "error");
           return;
         }
@@ -811,17 +831,13 @@
         var hasProxy = settings.proxy && settings.proxy.enabled;
         var usableKeyCount = t ? Object.keys(settings.apiKeys).length : 0;
         if (settings.analysisMode === "ai-only" && usableKeyCount === 0 && !hasProxy) {
-          console.log("[SummarizeThis DEBUG] blocked: ai-only mode with no key/proxy");
           showMessage(!t
             ? "AI-only mode requires a valid proxy endpoint in local preview."
             : "Add at least one API key, configure a valid proxy endpoint, or choose Auto/local mode.", "error");
           return;
         }
 
-        console.log("[SummarizeThis DEBUG] t (inTrello iframe) is:", t);
-
         if (!t) {
-          console.log("[SummarizeThis DEBUG] taking LOCAL PREVIEW path (t is falsy)");
           var safePreviewSettings = SummarizeThis.stripApiKeysForLocalPreview(settings);
           localStorage.setItem("summarizeThisSettings", JSON.stringify(safePreviewSettings));
           localStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(fields.backendSessionToken.value.trim()));
@@ -833,149 +849,30 @@
           return;
         }
 
-        console.log("[SummarizeThis DEBUG] taking REAL TRELLO save path, about to call t.set()...");
-
         try {
           var promptTemplatesForStorage = settings.promptTemplates;
           var coreSettings = Object.assign({}, settings);
           delete coreSettings.promptTemplates;
+          delete coreSettings.apiKeys;
 
-          console.log("[SummarizeThis DEBUG] coreSettings size (chars):", JSON.stringify(coreSettings).length);
-          console.log("[SummarizeThis DEBUG] promptTemplates size (chars):", JSON.stringify(promptTemplatesForStorage).length);
-
-          var result1 = await t.set("member", "private", "summarizeThisSettings", coreSettings);
-          console.log("[SummarizeThis DEBUG] t.set summarizeThisSettings result:", result1);
-
-          var result2 = await t.set("member", "private", "summarizeThisPromptTemplates", promptTemplatesForStorage);
-          console.log("[SummarizeThis DEBUG] t.set summarizeThisPromptTemplates result:", result2);
-
-          var result3 = await t.set("member", "private", "apiKeys", settings.apiKeys);
-          console.log("[SummarizeThis DEBUG] t.set apiKeys result:", result3);
-
-          var result4 = await t.set("member", "private", "preferredStrategy", settings.strategy);
-          console.log("[SummarizeThis DEBUG] t.set preferredStrategy result:", result4);
-
-          var result5 = await t.set("member", "private", "summarizeThisBackendSessionToken", fields.backendSessionToken.value.trim());
-          console.log("[SummarizeThis DEBUG] t.set summarizeThisBackendSessionToken result:", result5);
-
-          console.log("[SummarizeThis DEBUG] all t.set() calls completed successfully, showing success message");
+          await t.set("member", "private", "summarizeThisSettings", coreSettings);
+          await t.set("member", "private", "summarizeThisPromptTemplates", promptTemplatesForStorage);
+          await t.set("member", "private", "apiKeys", settings.apiKeys);
+          await t.set("member", "private", "preferredStrategy", settings.strategy);
+          await t.set("member", "private", "summarizeThisBackendSessionToken", fields.backendSessionToken.value.trim());
           fields.backendSessionToken.value = "";
           showMessage(successMessage, "success");
         } catch (error) {
-          console.log("[SummarizeThis DEBUG] CAUGHT ERROR during t.set():", error);
           showMessage("Settings could not be saved: " + (error && error.message ? error.message : String(error)), "error");
           return;
         }
 
         if (closeAfterSave) {
-          console.log("[SummarizeThis DEBUG] scheduling closePopup in 900ms");
           setTimeout(function () {
-            console.log("[SummarizeThis DEBUG] attempting t.closePopup()");
             if (t && t.closePopup) t.closePopup();
           }, 900);
         }
       }
-
-      // async function saveSettings(options) {
-      //   var settings = buildSettings();
-      //   var closeAfterSave = !(options && options.keepOpen);
-      //   var successMessage = options && options.successMessage ? options.successMessage : "Settings saved.";
-
-      //   Object.keys(settings.apiKeys).forEach(function (key) {
-      //     if (!settings.apiKeys[key]) delete settings.apiKeys[key];
-      //   });
-
-      //   if (fields.useProxy.checked && !settings.proxy.valid) {
-      //     showMessage(settings.proxy.error, "error");
-      //     return;
-      //   }
-
-      //   var hasProxy = settings.proxy && settings.proxy.enabled;
-      //   var usableKeyCount = t ? Object.keys(settings.apiKeys).length : 0;
-      //   if (settings.analysisMode === "ai-only" && usableKeyCount === 0 && !hasProxy) {
-      //     showMessage(!t
-      //       ? "AI-only mode requires a valid proxy endpoint in local preview."
-      //       : "Add at least one API key, configure a valid proxy endpoint, or choose Auto/local mode.", "error");
-      //     return;
-      //   }
-
-      //   if (!t) {
-      //     var safePreviewSettings = SummarizeThis.stripApiKeysForLocalPreview(settings);
-      //     localStorage.setItem("summarizeThisSettings", JSON.stringify(safePreviewSettings));
-      //     fields.openaiKey.value = "";
-      //     fields.googleKey.value = "";
-      //     fields.anthropicKey.value = "";
-      //     showMessage("Non-key settings saved for local preview. API keys are only stored in Trello member-private storage.", "success");
-      //     return;
-      //   }
-
-      //   await t.set("member", "private", "summarizeThisSettings", settings);
-      //   await t.set("member", "private", "apiKeys", settings.apiKeys);
-      //   await t.set("member", "private", "preferredStrategy", settings.strategy);
-      //   showMessage(successMessage, "success");
-
-      //   if (closeAfterSave) {
-      //     setTimeout(function () {
-      //       if (t && t.closePopup) t.closePopup();
-      //     }, 900);
-      //   }
-      // }
-      
-      // ============================================================
-// FIX: Save Settings failing with "PluginData length of 4096
-// characters exceeded" in settings-powerup.html
-// ============================================================
-//
-// PROBLEM: saveSettings() bundles everything -- including the
-// promptTemplates array (each template has a name + up to 600
-// characters of instructions) -- into ONE object saved under a
-// single key: t.set("member", "private", "summarizeThisSettings", settings)
-//
-// Trello enforces a hard 4096-character limit PER KEY. Once you have
-// even one or two saved templates plus all the other settings fields
-// (proxy, budget, generation, export preferences, etc.), the combined
-// JSON blows past that limit and the write throws -- which is why
-// Save Settings appears to silently do nothing.
-//
-// FIX: store promptTemplates in its own separate key, so the core
-// settings blob stays small and the templates can grow independently
-// (still bounded, but no longer compounding with everything else).
-// ============================================================
-
-// ---- Replace inside saveSettings() ----
-//
-// OLD:
-//   await t.set("member", "private", "summarizeThisSettings", settings);
-//   await t.set("member", "private", "apiKeys", settings.apiKeys);
-//   await t.set("member", "private", "preferredStrategy", settings.strategy);
-//
-// NEW:
-
-     
-      // ---- Replace inside readSettings(), in the `t` (real Trello) branch ----
-      //
-      // OLD:
-      //   var current = await safe(function () {
-      //     return t.get("member", "private", "summarizeThisSettings");
-      //   }, {});
-      //   var legacyKeys = await safe(function () {
-      //     return t.get("member", "private", "apiKeys");
-      //   }, {});
-      //   var strategy = await safe(function () {
-      //     return t.get("member", "private", "preferredStrategy");
-      //   }, "");
-      //
-      //   return Object.assign({}, fallback, current || {}, {
-      //     apiKeys: Object.assign({}, legacyKeys || {}, current && current.apiKeys ? current.apiKeys : {}),
-      //     strategy: current && current.strategy ? current.strategy : strategy || fallback.strategy,
-      //     proxy: SummarizeThis.normalizeProxySettings(current && current.proxy)
-      //   });
-      //
-      // NEW: also read the separate promptTemplates key and merge it back in,
-      // so the rest of the code (which expects settings.promptTemplates) keeps
-      // working unchanged.
-
-   
       async function clearKeys() {
         fields.openaiKey.value = "";
         fields.googleKey.value = "";
@@ -998,6 +895,134 @@
         return await safe(function () {
           return t.get("member", "private", "summarizeThisBackendSessionToken");
         }, "");
+      }
+
+      async function writeBackendSessionToken(token) {
+        var cleanToken = String(token || "").trim();
+        if (!t) {
+          localStorage.setItem("summarizeThisBackendSessionToken", JSON.stringify(cleanToken));
+          fields.backendSessionToken.value = cleanToken;
+          return;
+        }
+        await t.set("member", "private", "summarizeThisBackendSessionToken", cleanToken);
+        fields.backendSessionToken.value = cleanToken;
+      }
+
+      function configuredBackend() {
+        return SummarizeThis.normalizeBackendSettings({ apiBase: fields.backendApiBase.value }, {
+          enabled: fields.useProxy.checked,
+          endpoint: fields.proxyEndpoint.value
+        });
+      }
+
+      async function backendRequest(path, options, requireToken) {
+        var backend = configuredBackend();
+        if (!backend.valid) throw new Error(backend.error || "Add a valid backend API base first.");
+        var headers = { "Content-Type": "application/json" };
+        if (requireToken) {
+          var token = String(fields.backendSessionToken.value || await readBackendSessionToken() || "").trim();
+          if (!token) throw new Error("Sign in to the backend first.");
+          headers.Authorization = "Bearer " + token;
+        }
+        var response = await fetch(backend.apiBase + path, Object.assign({}, options || {}, {
+          headers: Object.assign(headers, options && options.headers ? options.headers : {})
+        }));
+        var data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || ("Backend request failed with status " + response.status + "."));
+        return { data: data, backend: backend };
+      }
+
+      async function testBackendConnection() {
+        fields.backendStatus.textContent = "Checking backend...";
+        try {
+          var result = await backendRequest("/health", { method: "GET" }, false);
+          fields.backendStatus.textContent = result.data.status === "ok" ? "Backend is connected and healthy." : "Backend responded but is not healthy.";
+        } catch (error) {
+          fields.backendStatus.textContent = "Connection failed: " + error.message;
+        }
+      }
+
+      async function authenticateBackend(path) {
+        var email = String(fields.backendEmail.value || "").trim();
+        var password = String(fields.backendPassword.value || "");
+        if (!email || !password) throw new Error("Enter your backend email and password.");
+        var payload = { email: email, password: password };
+        if (path === "/auth/register") {
+          payload.name = String(fields.backendName.value || "").trim();
+          if (!payload.name) throw new Error("Enter your name to create an account.");
+        }
+        var result = await backendRequest(path, { method: "POST", body: JSON.stringify(payload) }, false);
+        await writeBackendSessionToken(result.data.token);
+        fields.backendPassword.value = "";
+        fields.backendStatus.textContent = "Signed in as " + String(result.data.user && result.data.user.email || email) + ".";
+      }
+
+      async function registerBackendAccount() {
+        fields.backendStatus.textContent = "Creating account...";
+        try { await authenticateBackend("/auth/register"); }
+        catch (error) { fields.backendPassword.value = ""; fields.backendStatus.textContent = "Account could not be created: " + error.message; }
+      }
+
+      async function loginBackendAccount() {
+        fields.backendStatus.textContent = "Signing in...";
+        try { await authenticateBackend("/auth/login"); }
+        catch (error) { fields.backendPassword.value = ""; fields.backendStatus.textContent = "Sign in failed: " + error.message; }
+      }
+
+      async function logoutBackendAccount() {
+        try {
+          if (String(fields.backendSessionToken.value || "").trim()) {
+            await backendRequest("/auth/logout", { method: "POST", body: "{}" }, true);
+          }
+        } catch (_error) {
+          // Clear the local session even when the backend is unavailable.
+        }
+        await writeBackendSessionToken("");
+        fields.backendPassword.value = "";
+        fields.haiConnectorUrl.value = "";
+        fields.backendStatus.textContent = "Signed out.";
+      }
+
+      async function generateHaiConnector() {
+        fields.haiStatus.textContent = "Generating a private connector URL...";
+        try {
+          var result = await backendRequest("/integrations/hai/token", { method: "POST", body: "{}" }, true);
+          var backendRoot = result.backend.apiBase.replace(/\/api\/?$/, "");
+          fields.haiConnectorUrl.value = backendRoot + result.data.feedPath;
+          fields.haiStatus.textContent = "Connector URL generated. The previous URL, if any, is now revoked.";
+        } catch (error) {
+          fields.haiStatus.textContent = "Connector URL could not be generated: " + error.message;
+        }
+      }
+
+      function toggleHaiConnectorVisibility() {
+        fields.haiConnectorUrl.type = fields.haiConnectorUrl.type === "password" ? "text" : "password";
+      }
+
+      async function copyHaiConnector() {
+        if (!fields.haiConnectorUrl.value) {
+          fields.haiStatus.textContent = "Generate a connector URL first.";
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(fields.haiConnectorUrl.value);
+          fields.haiStatus.textContent = "Connector URL copied.";
+        } catch (_error) {
+          fields.haiConnectorUrl.type = "text";
+          fields.haiConnectorUrl.select();
+          fields.haiStatus.textContent = "Select and copy the connector URL manually.";
+        }
+      }
+
+      async function revokeHaiConnector() {
+        fields.haiStatus.textContent = "Revoking connector URL...";
+        try {
+          await backendRequest("/integrations/hai/token", { method: "DELETE" }, true);
+          fields.haiConnectorUrl.value = "";
+          fields.haiStatus.textContent = "Connector URL revoked.";
+        } catch (error) {
+          fields.haiStatus.textContent = "Connector URL could not be revoked: " + error.message;
+        }
       }
 
       async function savePromptTemplate() {

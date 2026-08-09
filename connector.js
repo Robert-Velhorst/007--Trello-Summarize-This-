@@ -6,10 +6,11 @@
 (function () {
   "use strict";
 
-  var POPUP_URL = "./popup.html";
-  var SETTINGS_URL = "./settings-powerup.html";
-  var ICON_URL = "./icon.svg";
-  var AUTHORIZE_URL = "./authorize.html";
+  var BUILD_ID = "20260809.1";
+  var POPUP_URL = "./popup.html?v=" + BUILD_ID;
+  var SETTINGS_URL = "./settings-powerup.html?v=" + BUILD_ID;
+  var ICON_URL = "./icon.svg?v=" + BUILD_ID;
+  var AUTHORIZE_URL = "./authorize.html?v=" + BUILD_ID;
   var DEFAULT_APP_NAME = "Summarize This";
 
   function runtimeConfig() {
@@ -190,7 +191,7 @@
     "show-settings": function (t) {
       return t.popup({
         title: "Summarize This Settings",
-        url: "./settings-powerup.html",
+          url: SETTINGS_URL,
         height: 620
       });
     },

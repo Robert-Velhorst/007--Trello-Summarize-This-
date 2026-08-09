@@ -1,6 +1,6 @@
 # Security
 
-Date: 2026-08-08
+Date: 2026-08-09
 
 ## Credential Handling
 
@@ -12,7 +12,8 @@ Date: 2026-08-08
 - Account emails are normalized and validated at registration and admin edit time; duplicate identities are rejected.
 - Registration passwords are bounded to 12-256 characters and processed with asynchronous scrypt. Unknown-user login performs equivalent scrypt work, and admin credential comparisons use timing-safe digests.
 - User data exports exclude password hashes, password salts, and sessions. Account deletion cascades owner-scoped data.
-- The local backend runtime-store directory is created with owner-only permissions (`0700`) and its JSON state file with owner-only permissions (`0600`) on POSIX hosts. The store is gitignored, but it remains a development-only persistence mechanism rather than a production secret store.
+- The local backend store uses owner-only permissions (`0700` directory and `0600` file) on POSIX. The Windows installer creates generated secrets in an inheritance-disabled, current-user-only ACL file.
+- PostgreSQL mode uses a bounded pool, optional certificate-verified TLS, optimistic revisions, and a per-table advisory lock so a second writer fails closed.
 - The `proxy/.dev.vars` file is `.gitignore`d and must never be committed.
 - Error messages are sanitized in all three integration modules (`ai-providers.js`, `trello-integration.js`, `attachment-processor.js`) to strip tokens, keys, and sensitive URLs before display.
 
@@ -55,6 +56,7 @@ The backend API (`backend-app.js`) now sends:
 - Exclusive runtime locking so backend, worker, and CLI cannot concurrently overwrite the JSON state file
 - Idempotency on summary, batch creation, backup creation, and credit mutations
 - Bounded sessions, events, jobs, notifications, rate windows, and backup retention
+- Per-user HAI capability URLs with HMAC-only token storage, immediate rotation/revocation, owner filtering, and explicit summary approval
 - Non-root Docker execution, dropped Linux capabilities, `no-new-privileges`, loopback Compose binding, and no embedded secrets
 
 ## Known Security Gaps (Not Production-Safe)
@@ -62,8 +64,8 @@ The backend API (`backend-app.js`) now sends:
 | Gap | Risk | Mitigation Required |
 |---|---|---|
 | Admin auth relies on environment credentials | High | Use managed secrets and production identity controls before internet exposure |
-| Local JSON token store | Medium | Not suitable for multi-instance production; migrate sessions to production storage |
-| Single-process local rate limits only | Medium | Current limits are durable locally; add distributed gateway limits before multi-instance deployment |
+| Whole-state PostgreSQL document | Medium | Safe for one writer; normalize tables and use transactional row-level operations before horizontal multi-writer scaling |
+| Process-local and persisted rate limits | Medium | Add a distributed gateway limiter before multi-instance deployment |
 | Local backups are not offsite disaster recovery | Medium | Copy encrypted snapshots to owner-controlled remote storage and test a live restore |
 | No HTTPS enforcement in backend | Medium | Run behind reverse proxy (nginx/caddy) with TLS |
 | Hosted Power-Up origin must be configured | Medium | Set `BACKEND_ALLOWED_ORIGINS` to the exact public Power-Up origin before enabling browser backend calls |
@@ -77,7 +79,7 @@ The backend API (`backend-app.js`) now sends:
 
 ## No Secrets Committed
 
-Verified on 2026-07-23:
-- `.gitignore` covers `.npm-cache/`, `.tmp/`, and `proxy/.dev.vars`.
+Verified on 2026-08-09:
+- `.gitignore` covers `node_modules/`, build staging, `.npm-cache/`, `.tmp/`, runtime data, and `proxy/.dev.vars`.
 - No API keys, tokens, or credentials appear in committed source files.
-- `trello-config.js` contains a placeholder comment, not a real key.
+- `trello-config.js` contains the public Trello application key required by the browser flow, never the private Trello secret.

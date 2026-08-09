@@ -7,7 +7,7 @@
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
 
-> Current scope: the shipped browser Power-Up is verified locally and has documented manual Trello evidence. It is **not** a production-ready hosted service: live provider credentials, Trello listing approval, production persistence, measured accuracy, and several integrations remain outside the verified scope. See [`docs/GOAL_COMPLETION_MATRIX.md`](docs/GOAL_COMPLETION_MATRIX.md) and [`docs/FINAL_VERIFICATION_REPORT.md`](docs/FINAL_VERIFICATION_REPORT.md).
+> Version 1.1.0 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with a bundled loopback backend. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
 
 ---
 
@@ -26,7 +26,7 @@ The active product currently provides:
 - 🧭 **Claim boundaries** — facts, inferences, uncertainty, and unsupported claims are presented separately
 - 📤 **Operator-controlled exports** — copy/export flows, with Trello comment posting behind explicit approval
 
-The repository also contains experimental, legacy, or disconnected backend/admin files. Those are not part of the shipped Power-Up unless the audit documents in `docs/` explicitly mark them active.
+The backend is part of the shipped product when persistence, batch job state, or HAI export is enabled. The deterministic browser summarizer continues to work without it.
 
 ---
 
@@ -101,36 +101,29 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 
 ## 🚀 Quick Start
 
+### Windows 11
+
+1. Download `SummarizeThisSetup.exe` from the current GitHub release or CI artifact.
+2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets.
+3. Open **Summarize This** from the Start menu for the standalone local app.
+4. Open **Configure Trello Power-Up** to get the exact hosted connector URL.
+5. Open **Share Backend with ngrok** only when Trello or HAI needs to reach the local backend over HTTPS.
+
+The installer does not require Node.js, Docker, or administrator rights. ngrok is optional and is not started automatically.
+
 ### 1. Deploy the Power-Up (3 minutes)
 
-**Option A: Netlify (Recommended)**
-```bash
-# Clone the repository
-git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
+GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
 
-# Deploy to Netlify
-cd 007--Trello-Summarize-This-
-# Drag folder to https://app.netlify.com/drop
-```
-
-**Option B: Vercel**
-```bash
-npm install -g vercel
-cd 007--Trello-Summarize-This-
-vercel
-```
-
-**Option C: GitHub Pages**
-- Enable Pages in repository Settings → Pages
-- Deploy from `main` branch
+`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260809.1`
 
 ### 2. Register as Trello Power-Up (4 minutes)
 
 1. Go to https://trello.com/power-ups/admin
-2. Click "Create New Power-Up"
+2. Open the existing **Summarize This** Power-Up or create it once.
 3. Fill in details:
    - **Name**: Summarize This
-   - **Connector URL**: `https://your-url.com/connector.js`
+   - **Connector URL**: the hosted `connector.html` URL above
    - **Capabilities**: `card-buttons`, `show-settings`, `authorization-status`
 4. Save
 
@@ -170,6 +163,7 @@ vercel
 - [**Final Verification Report**](docs/FINAL_VERIFICATION_REPORT.md) - Current evidence and open gaps
 - [**Roadmap and Blocked Items**](docs/ROADMAP_AND_BLOCKED_ITEMS.md) - Best next steps and current blockers
 - [**Improvement Roadmap**](NEXT_LEVEL_IMPROVEMENTS.md) - Future enhancements
+- [**HAI Connector**](docs/HAI_CONNECTOR.md) - Review-gated private feed and HAI setup
 - [**Power-Up README**](POWERUP_README.md) - Power-Up specific docs
 
 ### API Documentation

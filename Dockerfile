@@ -10,7 +10,10 @@ WORKDIR /app
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node backend-app.js backend-cli.js backend-config.js backend-lock.js backend-migrations.js backend-server.js backend-storage.js backend-summary.js backend-support.js backend-worker.js worker.js ./
 
-RUN mkdir -p /app/database/runtime && chown -R node:node /app/database
+RUN npm ci --omit=dev --prefer-offline \
+    && npm cache clean --force \
+    && mkdir -p /app/database/runtime \
+    && chown -R node:node /app/database
 
 USER node
 EXPOSE 8787

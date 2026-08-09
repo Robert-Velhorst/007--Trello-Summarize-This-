@@ -8,7 +8,7 @@
   var existing = root.SummarizeThisTrelloConfig || {};
   var appKey = typeof existing.appKey === "string"
     ? existing.appKey.trim()
-    : "87f50d5376d860dfac3dfbb42f5c7e79";
+    : "710f51778ec3e0eff7be947779695aed";
   var appName = typeof existing.appName === "string" && existing.appName.trim()
     ? existing.appName.trim()
     : "Summarize This";

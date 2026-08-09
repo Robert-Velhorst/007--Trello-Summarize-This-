@@ -1,6 +1,7 @@
 const config = require("./backend-config");
 
 const readiness = config.backendReadiness();
+const selectedStorage = config.publicConfig().storage;
 const hasMissing = (name) => readiness.missing.some((item) => item.startsWith(name));
 const checks = [
   {
@@ -15,8 +16,10 @@ const checks = [
   },
   {
     label: "Database runtime boundary",
-    ok: true,
-    detail: readiness.optional.DATABASE_URL ? "DATABASE_URL is configured but ignored: only the local JSON store is implemented." : "No DATABASE_URL configured; backend uses the local JSON store."
+    ok: selectedStorage !== "postgres" || !hasMissing("DATABASE_URL"),
+    detail: selectedStorage === "postgres"
+      ? (readiness.optional.DATABASE_URL ? "PostgreSQL store selected and DATABASE_URL is configured." : "PostgreSQL store selected but DATABASE_URL is missing.")
+      : (readiness.optional.DATABASE_URL ? "Local JSON store selected explicitly; DATABASE_URL is not used." : "Local JSON store selected.")
   },
   {
     label: "Proxy endpoint shape",
