@@ -4,52 +4,61 @@ Date: 2026-08-09
 
 ## Outcome
 
-The repository implements the giant prompt for the supported single-instance product scope. The release includes the static Trello Power-Up, authenticated backend, local and PostgreSQL persistence, reviewed worker workflows, a review-gated HAI feed, Docker deployment, and a standalone Windows 11 installer.
+The repository implements the giant prompt for the supported single-instance scope: static Trello Power-Up, authenticated backend, local and PostgreSQL persistence, reviewed worker workflows, a review-gated HAI feed, Docker deployment, and a standalone Windows 11 installer.
 
-This is not a claim of Trello marketplace approval, measured summary correctness, verified paid-provider credentials, a live HAI source, or horizontal multi-writer scaling. Those remain external acceptance or future-product gates.
+This is not a claim of Trello marketplace approval, measured summary correctness, verified paid-provider credentials, a live HAI source, code signing, or horizontal multi-writer scaling. Those remain external acceptance or future-product gates.
 
 ## Automated Evidence
 
 | Check | Result |
 |---|---|
-| `npm.cmd run test:all` with PostgreSQL 17 | PASS: core, static package, backend, worker/operations, HTTP E2E, 5,000-user pagination, PostgreSQL persistence/restart/writer exclusion, adversarial, labeled evaluation |
+| `npm.cmd run test:all` with PostgreSQL 17 | PASS: core, static package, backend, operations, HTTP E2E, 5,000-user pagination, PostgreSQL persistence/restart/writer exclusion, adversarial, labeled evaluation |
 | `npm.cmd audit --omit=dev` and `npm.cmd audit` | PASS: 0 vulnerabilities |
+| JavaScript and PowerShell parse scan | PASS: all remaining tracked files parse |
 | `node doctor.js` | PASS: 39 checks |
 | `node backend-doctor.js` with required environment | PASS |
-| `node tools/resource-analysis.js` | PASS: 444.4 KB initial popup, 40.2 KB deferred attachments, 621.9 KB static runtime, 2.95 MB repository source |
-| `docker build --tag summarize-this:local-qa .` | PASS: Node 22 Alpine, production dependencies, 0 vulnerabilities |
-| `tools/test-packaged-backend.ps1` | PASS: bundled executable healthy, version 1.1.0, local store created |
-| `tools/test-windows-install.ps1` | PASS: install, private ACL, backend startup, local persistence, uninstall |
-| Browser and Playwright QA | PASS: desktop/mobile render, no horizontal overflow, 0 errors/warnings, health check, account creation, HAI URL rotation/revocation, explicit save approval |
-| `ngrok version` and `ngrok config check` | PASS: 3.39.8 and valid user configuration; no public tunnel was opened during verification |
+| `node tools/resource-analysis.js` | PASS: 446.0 KB initial popup, 40.2 KB deferred attachments, 624.6 KB static runtime, 2.91 MB repository source |
+| Docker build | PASS: Node 22 Alpine, non-root runtime, production dependencies, 0 vulnerabilities |
+| HAI parser contract | PASS: generated feed accepted by account-feed and Connected Sources readers |
+| `tools/test-packaged-backend.ps1` | PASS: bundled executable healthy, local store created, process resource probe completed |
+| `tools/test-windows-install.ps1` | PASS: install, exact private ACLs, upgrade data preservation, private-file blocking, backend restart, uninstall |
+| Chrome browser QA | PASS: desktop/narrow render, no horizontal overflow, no console warnings/errors, standalone skips Trello SDK, installed backend default connects |
+| `ngrok version` and `ngrok config check` | PASS: 3.39.8 and valid user configuration; Summarize This public tunnel acceptance remains externally blocked |
 
 ## Resource Findings
 
-- Attachment parsing moved from every popup load to an on-demand 40.2 KB load.
-- The desktop default is one bundled backend process with a private JSON store; PostgreSQL and Docker are not required on Windows.
+- Standalone mode no longer downloads the Trello SDK; iframe mode still loads it for Trello.
+- Attachment parsing remains deferred until requested instead of adding 40.2 KB to every popup load.
+- Rate-limit windows moved from full durable-state rewrites to a bounded in-memory cache with fail-closed cardinality handling.
+- Seven invalid unreferenced files were removed, reducing repository source footprint from 2.96 MB to 2.91 MB.
+- The packaged backend measured 46,297,088 bytes working set and 55,291,904 bytes private memory at idle on this machine.
+- One hundred local health requests used 109 ms of backend CPU in the acceptance probe.
 - PostgreSQL uses a bounded pool of four connections by default and a single-writer advisory lock.
-- Static deployment is generated from a 24-file allowlist; backend source, environment files, caches, and build directories cannot enter Pages output.
-- The standalone backend executable is 57,928,372 bytes before installer compression.
-- The final Windows installer is 22,032,384 bytes (21.01 MiB), SHA-256 `F54690B345600264391986E91205E4545BE9B901025F61E7B7DF4CCD49779FED`.
+- Static deployment and the Windows launcher use the same 24-file allowlist.
+- The standalone backend executable is 57,929,587 bytes.
+- The Windows installer is 22,035,456 bytes (21.01 MiB), SHA-256 `B20357C649BEEDEC8337A6BD66CD3421E251964A608D4E455A9003C56363734B`.
 
 ## Security Findings Fixed
 
+- Removed invalid and misleading dead code from the tracked repository.
 - Removed browser debug logging that exposed provider keys and backend tokens.
 - Separated provider keys, backend sessions, and ordinary settings into member-private records.
-- Added transient-password account registration/sign-in instead of requiring manual session-token handling.
-- Added PostgreSQL TLS verification controls, bounded connections, durable health checks, optimistic revision protection, and writer exclusion.
-- Added per-user HAI capability URLs with HMAC-only storage, immediate rotation/revocation, explicit summary approval, strict Trello source links, stable cursors, and owner isolation.
-- Added generated Windows secrets protected by a current-user-only ACL.
+- Added transient-password account registration/sign-in instead of manual session-token handling.
+- Added PostgreSQL TLS controls, bounded connections, durable health checks, revision protection, and writer exclusion.
+- Added HAI capability URLs with HMAC-only storage, rotation/revocation, explicit summary approval, strict Trello source links, stable cursors, and bounded responses.
+- Made the Windows static server deny every file outside the public runtime manifest.
+- Restricted Windows settings and data to one current-user full-control ACL and proved upgrades preserve credentials/data without admin rights.
+- Made invalid backend storage configuration fail diagnostics before startup.
 - Preserved fail-closed payment, webhook, provider-backend, service-control, and unapproved external-action behavior.
-- Kept local HTTP limited to loopback; public Trello/HAI access requires the explicit ngrok shortcut and HTTPS URL.
+- Kept local HTTP limited to loopback; public Trello/HAI access requires an explicit HTTPS tunnel or managed ingress.
 
 ## External Acceptance Gates
 
-- Merge this branch, let the Pages workflow deploy `main`, and verify the live deployment manifest.
-- Update the existing Trello Power-Up connector/icon origin only after the live URLs return successfully.
-- Run approval-gated Trello comment and description tests on an expendable card after deployment.
+- Update the existing Trello Power-Up connector, icon origin, and allowed origin only after fresh user confirmation for that live account change.
+- Run approval-gated Trello comment and description tests on an expendable card after the updated connector is active.
+- The user's free ngrok development domain is currently occupied by another application (`ERR_NGROK_334`); free that domain or provide a separate domain before public tunnel acceptance.
 - Create the HAI `json-feed` source under the owner's authenticated HAI session and allowlist only the selected ngrok hostname.
-- Use a representative independently labeled held-out dataset before making any accuracy claim.
+- Use a representative independently labeled held-out dataset before making an accuracy claim.
 - Add code signing for a lower-friction Windows SmartScreen experience.
 - Add managed ingress, secret management, monitoring, encrypted offsite backups, and a read/write data-model redesign before horizontal multi-instance operation.
 

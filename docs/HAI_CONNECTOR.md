@@ -49,13 +49,16 @@ The endpoint returns:
       "title": "Reviewed Trello summary",
       "content": "Exact reviewed summary text",
       "sourceUri": "https://trello.com/c/card-id/card-name",
-      "itemType": "trello-card-summary",
+      "itemType": "card",
+      "provider": "trello",
+      "accountLabel": "summarize-this",
       "projectKey": "trello-summaries",
-      "metadata": "{\"reviewedAt\":\"...\",\"haiApprovedAt\":\"...\"}"
+      "receivedAt": "2026-08-09T00:00:00.000Z"
     }
   ],
+  "cursor": "approval-time|summary-id",
   "nextCursor": "approval-time|summary-id"
 }
 ```
 
-HAI may append its `cursor` query parameter. The response is capped at 100 records per request and uses a stable approval-time cursor.
+The contract is accepted by both HAI JSON readers. `provider` and `itemType` use HAI account-feed enum values; optional metadata is omitted because HAI's Connected Sources and account-feed parsers use different metadata representations. HAI Connected Sources advances `nextCursor`, while the account-feed envelope reads `cursor`, so both names carry the same stable approval-time value. A cursor-free request starts with the oldest approved page and subsequent requests receive every later page without gaps.

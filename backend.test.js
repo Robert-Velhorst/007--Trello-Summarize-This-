@@ -119,6 +119,11 @@ async function main() {
   assert.equal(placeholderReadiness.missing.length, 2);
   process.env.JWT_SECRET = validSessionSecret;
   process.env.ADMIN_PASSWORD = validAdminPassword;
+  process.env.BACKEND_STORE = "unsupported";
+  const invalidStoreReadiness = backendConfig.backendReadiness();
+  assert.equal(invalidStoreReadiness.ok, false);
+  assert.ok(invalidStoreReadiness.missing.some((item) => item.startsWith("BACKEND_STORE")));
+  delete process.env.BACKEND_STORE;
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(storageDirectory).mode & 0o077, 0);
     assert.equal(fs.statSync(filePath).mode & 0o077, 0);
@@ -149,6 +154,7 @@ async function main() {
   });
   assert.equal(allowedPreflight.status, 204);
   assert.equal(allowedPreflight.headers["access-control-allow-origin"], "http://127.0.0.1:17117");
+  assert.match(allowedPreflight.headers["access-control-allow-headers"], /ngrok-skip-browser-warning/i);
   assert.equal(allowedPreflight.headers.vary, "Origin");
 
   const rejectedOrigin = await requestJson(app, "GET", "/api/health", undefined, {
@@ -215,6 +221,7 @@ async function main() {
     password: "incorrect-password"
   });
   assert.equal(throttledLogin.status, 429);
+  assert.equal((await app.store.list("rateLimitWindows")).length, 0);
 
   const sharedClientAddress = "198.51.100.22";
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -365,10 +372,39 @@ async function main() {
     assert.equal(haiFeed.data.items[0].externalId, `summarize-this:${reviewedSummary.data.summary.id}`);
     assert.equal(haiFeed.data.items[0].content, "The exact reviewed summary content approved for HAI ingestion.");
     assert.equal(haiFeed.data.items[0].sourceUri, "https://trello.com/c/abc123/contract-card");
+    assert.equal(haiFeed.data.items[0].provider, "trello");
+    assert.equal(haiFeed.data.items[0].itemType, "card");
+    assert.equal(haiFeed.data.items[0].accountLabel, "summarize-this");
+    assert.equal(haiFeed.data.items[0].metadata, undefined);
+    assert.equal(haiFeed.data.cursor, haiFeed.data.nextCursor);
     assert.ok(haiFeed.data.nextCursor);
     const emptyHaiFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(haiFeed.data.nextCursor)}`);
     assert.equal(emptyHaiFeed.status, 200);
     assert.deepEqual(emptyHaiFeed.data.items, []);
+
+    const recurringSummaries = Array.from({ length: 105 }, (_item, index) => ({
+      id: `recurring-${String(index).padStart(3, "0")}`,
+      userId: customRegister.data.user.id,
+      title: `Recurring summary ${index}`,
+      summary: `HAI recurring sync summary ${index}`,
+      sourceUri: `https://trello.com/c/feed${index}/recurring-${index}`,
+      reviewedAt: new Date(Date.UTC(2030, 0, 1, 0, index)).toISOString(),
+      haiApprovedAt: new Date(Date.UTC(2030, 0, 1, 0, index)).toISOString(),
+      createdAt: new Date(Date.UTC(2030, 0, 1, 0, index)).toISOString(),
+      updatedAt: new Date(Date.UTC(2030, 0, 1, 0, index)).toISOString()
+    }));
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat(recurringSummaries));
+    const recurringFirstPage = await requestJson(app, "GET", firstHaiToken.data.feedPath);
+    assert.equal(recurringFirstPage.status, 200);
+    assert.equal(recurringFirstPage.data.items.length, 100);
+    assert.equal(recurringFirstPage.data.items[0].externalId, `summarize-this:${reviewedSummary.data.summary.id}`);
+    assert.equal(recurringFirstPage.data.items.at(-1).externalId, "summarize-this:recurring-098");
+    const recurringSecondPage = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(recurringFirstPage.data.nextCursor)}`);
+    assert.equal(recurringSecondPage.status, 200);
+    assert.equal(recurringSecondPage.data.items.length, 6);
+    assert.equal(recurringSecondPage.data.items[0].externalId, "summarize-this:recurring-099");
+    assert.equal(recurringSecondPage.data.items.at(-1).externalId, "summarize-this:recurring-104");
+    assert.equal(recurringSecondPage.data.cursor, "2030-01-01T01:44:00.000Z|recurring-104");
 
     const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
       Authorization: `Bearer ${token}`
