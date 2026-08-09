@@ -4855,10 +4855,6 @@
       async function readPrivateObject(key, fallback) {
         if (!t) {
           try {
-            if (key === "summarizeThisBackendSessionToken") {
-              var sessionValue = sessionStorage.getItem(key);
-              return sessionValue ? JSON.parse(sessionValue) : fallback;
-            }
             if (!localPreviewStorageKeys.has(key)) return fallback;
             var previewSessionValue = localPreviewPrivateState.get(key);
             if (previewSessionValue) return JSON.parse(previewSessionValue);
@@ -4879,10 +4875,6 @@
 
       async function writePrivateObject(key, value) {
         if (!t) {
-          if (key === "summarizeThisBackendSessionToken") {
-            sessionStorage.setItem(key, JSON.stringify(String(value || "")));
-            return;
-          }
           if (!localPreviewStorageKeys.has(key)) return;
           localPreviewPrivateState.set(key, JSON.stringify(value));
           return;
@@ -4894,7 +4886,19 @@
       }
 
       async function readBackendSessionToken() {
-        var token = await readPrivateObject("summarizeThisBackendSessionToken", "");
+        var token = "";
+        if (!t) {
+          try {
+            var sessionValue = sessionStorage.getItem("summarizeThisBackendSessionToken");
+            token = sessionValue ? JSON.parse(sessionValue) : "";
+          } catch (error) {
+            token = "";
+          }
+        } else {
+          token = await safe(function () {
+            return t.get("member", "private", "summarizeThisBackendSessionToken");
+          }, "");
+        }
         return String(token || "").trim();
       }
 

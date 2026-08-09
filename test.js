@@ -254,7 +254,8 @@ assert.doesNotMatch(trelloSafeError, /secret123|trello-token|attachments\.exampl
 assert.match(trelloSafeError, /redacted|url redacted/);
 const popupText = fs.readFileSync(path.join(__dirname, "popup.html"), "utf8");
 assert.doesNotMatch(popupText, /localStorage\.setItem\("summarizeThisBackendSessionToken"/);
-assert.match(popupText, /sessionStorage\.setItem\(key/);
+assert.doesNotMatch(popupText, /sessionStorage\.setItem\(key/);
+assert.match(popupText, /sessionStorage\.getItem\("summarizeThisBackendSessionToken"/);
 assert.match(popupText, /trello-config\.js/);
 assert.match(popupText, /function trelloAppKey/);
 assert.doesNotMatch(popupText, /var TRELLO_API_KEY = "87f50d5376d860dfac3dfbb42f5c7e79"/);
