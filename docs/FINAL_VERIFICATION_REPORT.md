@@ -36,7 +36,7 @@ This is not a claim of Trello marketplace approval, measured summary correctness
 - PostgreSQL uses a bounded pool of four connections by default and a single-writer advisory lock.
 - Static deployment and the Windows launcher use the same 24-file allowlist.
 - The standalone backend executable is 57,929,587 bytes.
-- The Windows installer is 22,035,456 bytes (21.01 MiB), SHA-256 `B20357C649BEEDEC8337A6BD66CD3421E251964A608D4E455A9003C56363734B`.
+- The Windows installer is 22,034,944 bytes (21.01 MiB), SHA-256 `2D22A754C82B95BC620E59B89A530AD832265B6C56D6FDDA731F899919781E1E`.
 
 ## Security Findings Fixed
 

@@ -76,7 +76,7 @@ function Test-CurrentUserOnlyAcl {
     [System.Security.Principal.SecurityIdentifier]$CurrentUser,
     [System.Security.AccessControl.InheritanceFlags]$InheritanceFlags
   )
-  if (-not $Security.AreAccessRulesProtected -or $Security.GetOwner([System.Security.Principal.SecurityIdentifier]) -ne $CurrentUser) {
+  if (-not $Security.AreAccessRulesProtected) {
     return $false
   }
   $rules = @($Security.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
@@ -91,9 +91,6 @@ function Protect-CurrentUserFile {
   param([string]$Path)
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
   $security = Get-Acl -LiteralPath $Path
-  if ($security.GetOwner([System.Security.Principal.SecurityIdentifier]) -ne $identity.User) {
-    throw "The private settings file is not owned by the current Windows user."
-  }
   if (Test-CurrentUserOnlyAcl -Security $security -CurrentUser $identity.User -InheritanceFlags ([System.Security.AccessControl.InheritanceFlags]::None)) {
     return
   }
@@ -114,9 +111,6 @@ function Protect-CurrentUserDirectory {
   param([string]$Path)
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
   $security = Get-Acl -LiteralPath $Path
-  if ($security.GetOwner([System.Security.Principal.SecurityIdentifier]) -ne $identity.User) {
-    throw "The private data directory is not owned by the current Windows user."
-  }
   $directoryInheritance = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit"
   if (Test-CurrentUserOnlyAcl -Security $security -CurrentUser $identity.User -InheritanceFlags $directoryInheritance) {
     return
