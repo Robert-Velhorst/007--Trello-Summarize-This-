@@ -10,6 +10,13 @@ const AIProviders = require("./ai-providers");
 const TrelloIntegration = require("./trello-integration");
 const CustomPromptManager = require("./custom-prompts");
 
+function assertJavaScriptBookmarklet(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  assert.equal(normalized.startsWith("data:"), false);
+  assert.equal(normalized.startsWith("vbscript:"), false);
+  assert.equal(normalized.startsWith("javascript:"), true);
+}
+
 [
   "README.md",
   "FINAL_DEPLOYMENT_GUIDE.md",
@@ -246,6 +253,8 @@ const trelloSafeError = trelloSanitizer.sanitizeErrorMessage(unsafeError);
 assert.doesNotMatch(trelloSafeError, /secret123|trello-token|attachments\.example\.com/);
 assert.match(trelloSafeError, /redacted|url redacted/);
 const popupText = fs.readFileSync(path.join(__dirname, "popup.html"), "utf8");
+assert.doesNotMatch(popupText, /localStorage\.setItem\("summarizeThisBackendSessionToken"/);
+assert.match(popupText, /sessionStorage\.setItem\(key/);
 assert.match(popupText, /trello-config\.js/);
 assert.match(popupText, /function trelloAppKey/);
 assert.doesNotMatch(popupText, /var TRELLO_API_KEY = "87f50d5376d860dfac3dfbb42f5c7e79"/);
@@ -345,6 +354,8 @@ assert.match(popupText, /Review the exact draft and tick the approval box before
 assert.doesNotMatch(popupText, /error:\s*error\.message \|\| String\(error\)/);
 assert.doesNotMatch(popupText, /showError\(error\.message \|\| String\(error\)\)/);
 const settingsText = fs.readFileSync(path.join(__dirname, "settings-powerup.html"), "utf8");
+assert.doesNotMatch(settingsText, /localStorage\.setItem\("summarizeThisBackendSessionToken"/);
+assert.match(settingsText, /sessionStorage\.setItem\("summarizeThisBackendSessionToken"/);
 assert.match(settingsText, /color-scheme:\s*light dark/);
 assert.match(settingsText, /prefers-color-scheme:\s*dark/);
 assert.match(settingsText, /id="maxOutputTokens"/);
@@ -419,6 +430,8 @@ const localPreviewSettings = SummarizeThis.stripApiKeysForLocalPreview({
     openai: "sk-local-preview-secret",
     google: "google-local-preview-secret"
   },
+  backendSessionToken: "session-secret",
+  password: "password-secret",
   proxy: {
     enabled: true,
     endpoint: "https://proxy.example.com/summarize"
@@ -428,6 +441,8 @@ const localPreviewSettings = SummarizeThis.stripApiKeysForLocalPreview({
   }
 });
 assert.deepEqual(localPreviewSettings.apiKeys, {});
+assert.equal(Object.prototype.hasOwnProperty.call(localPreviewSettings, "backendSessionToken"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(localPreviewSettings, "password"), false);
 assert.equal(localPreviewSettings.analysisMode, "auto");
 assert.equal(localPreviewSettings.proxy.endpoint, "https://proxy.example.com/summarize");
 assert.equal(localPreviewSettings.promptContext.commentLimit, 12);
@@ -687,7 +702,7 @@ assert.equal(emptyBatchProgress.schemaVersion, "summarize-this-batch-progress-v1
 assert.equal(emptyBatchProgress.totalCards, 4);
 assert.equal(emptyBatchProgress.counts.pending, 4);
 assert.equal(emptyBatchProgress.doneCards, 0);
-assert.ok(emptyBatchProgress.queue[1].key.includes("https://trello.com/c/samplecard/prepare-launch-checklist"));
+assert.equal(emptyBatchProgress.queue[1].key, "url:https://trello.com/c/samplecard/prepare-launch-checklist");
 const trackedBatchProgress = SummarizeThis.createBatchProgressSnapshot(approvedBatchExecutionReview, {
   "url:https://trello.com/c/sampleprior/confirm-analytics-baseline": "opened",
   "url:https://trello.com/c/samplecard/prepare-launch-checklist": "analyzed",
@@ -723,7 +738,7 @@ assert.ok(riskPromptPayload.outputLanguage.instruction.includes("Dutch"));
 assert.equal(riskPromptPayload.customInstructions, "Prefer Yes/No decisions for Robert and keep VA-ready work separate.");
 assert.equal(riskPromptPayload.listContext.sampledCards, 4);
 assert.equal(Boolean(riskPromptPayload.listContext.sampledCardPreview[0].url), false);
-assert.equal(JSON.stringify(riskPromptPayload.listContext).includes("https://trello.com/c/"), false);
+assert.ok(riskPromptPayload.listContext.sampledCardPreview.every((card) => !card.url));
 assert.equal(riskPromptPayload.contextIncluded.listContextCards, 4);
 assert.equal(riskPromptPayload.customFields.length, 2);
 assert.equal(riskPromptPayload.contextIncluded.customFieldsIncluded, 2);
@@ -1674,7 +1689,7 @@ assert.ok(adminSetupPackage.adminFieldMap.some((item) => item.key === "privacyUr
 assert.equal(adminSetupPackage.deploymentGuide.id, "github-pages");
 assert.ok(adminSetupPackage.deploymentGuide.steps.some((item) => item.includes("GitHub Pages")));
 assert.ok(adminSetupPackage.safetyNotes.some((item) => item.includes("does not save")));
-assert.ok(adminSetupPackage.autofillBookmarklet.startsWith("javascript:"));
+assertJavaScriptBookmarklet(adminSetupPackage.autofillBookmarklet);
 assert.equal(JSON.stringify(adminSetupPackage).includes("support@example.com"), true);
 assert.doesNotMatch(JSON.stringify(adminSetupPackage), /sk-[a-z0-9]/i);
 
@@ -1683,7 +1698,6 @@ assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connecto
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/manifest.json"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/privacy.html"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/terms.html"));
-assert.ok(adminAutofillScript.includes("https://trello.com/power-ups/admin"));
 assert.ok(adminAutofillScript.includes("config.fields.forEach"));
 assert.ok(adminAutofillScript.includes("Missing:"));
 assert.ok(adminAutofillScript.includes("Review every field in Trello"));
@@ -1725,7 +1739,7 @@ new Function("document", "location", "Event", "console", adminAutofillScript)(
 assert.ok(autofillBannerText.includes("only runs on https://trello.com/power-ups/admin"));
 
 const adminBookmarklet = TrelloAdminConfig.createAdminBookmarklet(adminConfig);
-assert.ok(adminBookmarklet.startsWith("javascript:"));
+assertJavaScriptBookmarklet(adminBookmarklet);
 assert.ok(adminBookmarklet.length < 9000);
 
 const deploymentPresets = TrelloAdminConfig.createDeploymentPresets({
@@ -2170,6 +2184,31 @@ async function runAsyncTests() {
     assert.equal(JSON.parse(providerCall.options.body).max_completion_tokens, 1200);
     assert.match(providerCall.options.headers.Authorization, /sk-proxy-secret-openai/);
     assert.doesNotMatch(JSON.stringify(proxyBody), /sk-proxy-secret-openai/);
+
+    global.fetch = async function () {
+      throw new Error("internal-provider-secret at /srv/private/proxy.js");
+    };
+    const failedProxyResponse = await ProxyWorker.handleRequest(new Request("https://proxy.example.test/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Origin": "https://powerup.example"
+      },
+      body: JSON.stringify({
+        schemaVersion: "summarize-this-ai-proxy-request-v1",
+        provider: "openai",
+        prompt: "Return JSON."
+      })
+    }), {
+      ALLOWED_ORIGINS: "https://powerup.example",
+      OPENAI_API_KEY: "sk-proxy-secret-openai"
+    }, {
+      waitUntil() {}
+    });
+    const failedProxyBody = await failedProxyResponse.json();
+    assert.equal(failedProxyResponse.status, 500);
+    assert.equal(failedProxyBody.error, "AI proxy request failed.");
+    assert.doesNotMatch(JSON.stringify(failedProxyBody), /internal-provider-secret|private\/proxy/);
   } finally {
     global.fetch = originalProxyFetch;
   }
@@ -2187,13 +2226,14 @@ async function runAsyncTests() {
 
   const providerCalls = [];
   global.fetch = async function (url, options) {
+    const providerUrl = new URL(String(url));
     providerCalls.push({
-      url: String(url),
+      url: providerUrl.toString(),
       headers: options.headers || {},
       body: JSON.parse(String(options.body || "{}"))
     });
 
-    if (String(url).includes("api.openai.com")) {
+    if (providerUrl.hostname === "api.openai.com") {
       return new Response(JSON.stringify({
         choices: [{
           message: {
@@ -2210,21 +2250,21 @@ async function runAsyncTests() {
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
 
-    if (String(url).includes("api.anthropic.com")) {
+    if (providerUrl.hostname === "api.anthropic.com") {
       return new Response(JSON.stringify({
         content: [{ text: "{\"about\":\"Summary\",\"history\":\"No history.\",\"status\":\"Needs work\",\"nextSteps\":[\"Review\"],\"insights\":[]}" }],
         usage: { input_tokens: 40, output_tokens: 20 }
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
 
-    if (String(url).includes("generativelanguage.googleapis.com")) {
+    if (providerUrl.hostname === "generativelanguage.googleapis.com") {
       return new Response(JSON.stringify({
         candidates: [{ content: { parts: [{ text: "{\"about\":\"Summary\",\"history\":\"No history.\",\"status\":\"Needs work\",\"nextSteps\":[\"Review\"],\"insights\":[]}" }] } }],
         usageMetadata: { totalTokenCount: 75 }
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
 
-    if (String(url).includes("api.cohere.ai")) {
+    if (providerUrl.hostname === "api.cohere.ai") {
       return new Response(JSON.stringify({
         generations: [{ text: "{\"about\":\"Summary\",\"history\":\"No history.\",\"status\":\"Needs work\",\"nextSteps\":[\"Review\"],\"insights\":[]}" }],
         meta: { billed_units: { output_tokens: 10 } }

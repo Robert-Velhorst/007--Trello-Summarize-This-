@@ -27,7 +27,6 @@ Your Trello Power-Up is configured to use evidence-backed confidence scoring, va
 - accuracy-system.js (accuracy modules)
 - advanced-modules.js (Phase 2 features)
 - intelligence-modules.js (Phase 3 features)
-- integration-modules.js (Phase 4 features)
 - settings-powerup.html (AI access configuration)
 - manifest.json (Power-Up configuration)
 - All documentation

@@ -62,7 +62,7 @@ async function requestJson(app, method, targetPath, body, headers = {}, rawBody,
       } catch (_error) {
         data = text;
       }
-      resolve({ status: res.statusCode, data, headers: res.headers });
+      resolve({ status: res.statusCode, data, headers: res.headers, text });
     });
     res.on("error", reject);
   });
@@ -188,10 +188,12 @@ async function main() {
   const customRegister = await requestJson(app, "POST", "/api/auth/register", {
     email: customUserEmail,
     password: "custom-file-pass",
-    name: "Custom File User"
+    name: "<script>alert(1)</script>Custom File User"
   });
   assert.equal(customRegister.status, 201);
   assert.ok(customRegister.data.token);
+  assert.doesNotMatch(customRegister.text, /<script>/i);
+  assert.match(customRegister.text, /\\u003cscript\\u003e/i);
   const storedRegistrationSession = (await app.store.list("sessions")).find((item) => item.userId === customRegister.data.user.id);
   assert.equal(storedRegistrationSession.tokenHash, sessionTokenHash(customRegister.data.token));
   assert.notEqual(storedRegistrationSession.tokenHash, crypto.createHash("sha256").update(customRegister.data.token).digest("hex"));

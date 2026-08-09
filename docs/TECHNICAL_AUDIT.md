@@ -48,7 +48,7 @@ The shipped product consists of:
 
 ## Inactive Areas
 
-Supplementary legacy modules such as `connection.js`, `adminApi.js`, `analytics-dashboard.js`, `credit-usage-analytics.js`, and `feature-adoption-tracker.js` are not part of the shipped runtime claim. Seven invalid, unreferenced legacy/placeholding files were removed during this audit rather than retained as apparent product code.
+Supplementary legacy modules such as `connection.js`, `adminApi.js`, and `credit-usage-analytics.js` are not part of the shipped runtime claim. Invalid, unreferenced files were removed during this audit, including prototype code, fake integration scaffolding, and stale completion documents, rather than retained as apparent product code.
 
 ## Completion Baseline
 

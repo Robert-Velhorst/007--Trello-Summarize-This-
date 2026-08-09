@@ -102,7 +102,8 @@ function generateRandomText(length = 100) {
 }
 
 function authenticateUser() {
-  const user = getRandomElement(testData.users);
+  const virtualUser = typeof __VU === 'number' ? __VU : 1;
+  const user = testData.users[(Math.max(1, virtualUser) - 1) % testData.users.length];
   
   const loginResponse = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({
     email: user.email,

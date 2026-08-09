@@ -202,7 +202,8 @@ function measureDatabaseOperation(operation, expectedDuration = 1000) {
 }
 
 function authenticateUser() {
-  const user = getRandomElement(users);
+  const virtualUser = typeof __VU === 'number' ? __VU : 1;
+  const user = users[(Math.max(1, virtualUser) - 1) % users.length];
   const start = Date.now();
   
   const response = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({

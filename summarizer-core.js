@@ -2200,9 +2200,31 @@
 
   function stripApiKeysForLocalPreview(settings) {
     var source = settings && typeof settings === "object" ? settings : {};
-    return Object.assign({}, source, {
+    return {
+      analysisMode: source.analysisMode,
+      provider: source.provider,
+      strategy: source.strategy,
+      providerMode: source.providerMode,
+      outputMode: source.outputMode,
+      outputLanguage: source.outputLanguage,
+      exportPreferences: source.exportPreferences,
+      customInstructions: source.customInstructions,
+      selectedPromptTemplateId: source.selectedPromptTemplateId,
+      promptTemplates: source.promptTemplates,
+      includeListContext: source.includeListContext,
+      extractTextAttachments: source.extractTextAttachments,
+      requireSensitiveAiApproval: source.requireSensitiveAiApproval,
+      proxy: source.proxy,
+      backend: source.backend,
+      promptContext: source.promptContext,
+      generation: source.generation,
+      budget: source.budget,
+      openaiModel: source.openaiModel,
+      googleModel: source.googleModel,
+      anthropicModel: source.anthropicModel,
+      updatedAt: source.updatedAt,
       apiKeys: {}
-    });
+    };
   }
 
   function createCostRecord(metadata, options) {

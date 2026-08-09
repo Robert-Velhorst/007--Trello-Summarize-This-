@@ -1154,6 +1154,18 @@
       "use strict";
 
       var t = null;
+      var localPreviewStorageKeys = new Set([
+        "analysisHistory",
+        "summarizeThisBatchProgress",
+        "summarizeThisCostRecords",
+        "summarizeThisExportRecords",
+        "summarizeThisFeedback",
+        "summarizeThisLedgerHistory",
+        "summarizeThisPerformanceRecords",
+        "summarizeThisReviewRecords",
+        "summarizeThisTrelloCommentAttempts",
+        "summarizeThisTrelloDescriptionAttempts"
+      ]);
       var lastCardData = null;
       var lastAnalysis = null;
       var lastLedgerRun = null;
@@ -4838,6 +4850,11 @@
       async function readPrivateObject(key, fallback) {
         if (!t) {
           try {
+            if (key === "summarizeThisBackendSessionToken") {
+              var sessionValue = sessionStorage.getItem(key);
+              return sessionValue ? JSON.parse(sessionValue) : fallback;
+            }
+            if (!localPreviewStorageKeys.has(key)) return fallback;
             var localValue = localStorage.getItem(key);
             return localValue ? JSON.parse(localValue) : fallback;
           } catch (error) {
@@ -4852,6 +4869,11 @@
 
       async function writePrivateObject(key, value) {
         if (!t) {
+          if (key === "summarizeThisBackendSessionToken") {
+            sessionStorage.setItem(key, JSON.stringify(String(value || "")));
+            return;
+          }
+          if (!localPreviewStorageKeys.has(key)) return;
           localStorage.setItem(key, JSON.stringify(value));
           return;
         }

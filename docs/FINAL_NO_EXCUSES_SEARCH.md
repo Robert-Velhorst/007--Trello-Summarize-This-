@@ -20,7 +20,6 @@ The following files contain one or more of the target patterns. Each is assessed
 | `adminApi.js` | password, token, mock | Inactive file (requires undeclared deps). Patterns are in legacy stubs and documentation strings. |
 | `advanced-modules.js` | placeholder, TODO | Legacy module. Not part of shipped flow. Contains comments about future integration points. |
 | `ai-providers.js` | token, secret, mock | token/secret references are in error sanitization patterns (removing them from output). mock is used in tests only. |
-| `analytics-dashboard.js` | TODO, placeholder | Legacy analytics module. Not in shipped flow. |
 | `artillery-processor.js` | token | Load test file. Not in shipped flow. |
 | `attachment-processor.js` | token | Used in error sanitization to detect and strip sensitive URLs. Not a stored token. |
 | `backend-app.js` | password, token, secret | password — handled via salted hashes for user accounts and env-based admin credentials. token — used correctly as Bearer token auth. secret — JWT_SECRET environment variable reference. |
@@ -36,7 +35,6 @@ The following files contain one or more of the target patterns. Each is assessed
 | `errorHandler.js` | TODO | Legacy file. Not in shipped flow. |
 | `export.js` | token | Trello auth token reference in export helpers. Correct use. |
 | `index.html` | mock, fake, placeholder | Demo page (not Power-Up entry). Contains sample card data with these words. |
-| `integration-modules.js` | TODO, mock | Legacy integration scaffolding. Not in shipped flow. |
 | `intelligence-modules.js` | placeholder | Legacy module. Not in shipped flow. |
 | `multi-ai-integration.js` | mock | Legacy multi-AI module. Not in shipped flow. |
 | `popup.html` | token, secret | token — Trello API token fetched through t.getRestApi(). secret — referenced only in sanitizeUserVisibleError to strip secrets from errors. |
