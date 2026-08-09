@@ -43,6 +43,8 @@ Admin endpoints require an admin token (`role: "admin"`):
 - All `/api/admin/*` routes
 - Admin token obtained via `/api/admin/auth/login`
 
+Admin authority is server-session-based. The admin user-edit route does not permit changing a persisted user's `role` field, so a user-record update cannot create an apparent or effective admin account.
+
 Regular user tokens cannot access admin routes (verified in `adversarial.test.js`).
 
 ### Resource Ownership Checks

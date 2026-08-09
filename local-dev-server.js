@@ -22,17 +22,27 @@ const MIME_TYPES = {
 };
 
 function safePathname(requestUrl) {
-  const parsed = new URL(requestUrl, `http://${HOST}:${PORT}`);
-  const pathname = decodeURIComponent(parsed.pathname);
-  const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
-  return normalized === "/" ? "/index.html" : normalized;
+  try {
+    const parsed = new URL(requestUrl, `http://${HOST}:${PORT}`);
+    const pathname = decodeURIComponent(parsed.pathname).replace(/\\/g, "/");
+    const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
+    return normalized === "/" ? "/index.html" : normalized;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isPathInsideRoot(resolved) {
+  const relative = path.relative(ROOT, resolved);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
 function resolveFile(requestUrl) {
   const pathname = safePathname(requestUrl);
+  if (!pathname) return null;
   const resolved = path.resolve(ROOT, `.${pathname}`);
 
-  if (!resolved.startsWith(ROOT)) {
+  if (!isPathInsideRoot(resolved)) {
     return null;
   }
 
@@ -44,11 +54,20 @@ function send(res, status, headers, body) {
   res.end(body);
 }
 
+// Base security headers applied to every response.
+// NOTE: X-Frame-Options is intentionally NOT included here. This server
+// serves connector.html, which Trello must be able to load inside its own
+// cross-origin iframe. A blanket X-Frame-Options: SAMEORIGIN would block
+// that entirely. Instead, HTML responses get a scoped Content-Security-Policy
+// (see FRAME_ANCESTORS_CSP below) that allows framing only by Trello's
+// origins, which is both more precise and still blocks arbitrary sites from
+// framing this server.
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "no-referrer"
 };
+
+const FRAME_ANCESTORS_CSP = "frame-ancestors https://trello.com https://*.trello.com";
 
 const server = http.createServer((req, res) => {
   // CORS headers for local development
@@ -78,11 +97,18 @@ const server = http.createServer((req, res) => {
     const extension = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[extension] || "application/octet-stream";
 
-    res.writeHead(200, {
+    const headers = {
       "Content-Type": contentType,
       "Cache-Control": "no-store"
-    });
+    };
 
+    // Only HTML documents need to be frameable (connector.html is loaded by
+    // Trello inside an iframe). Other asset types don't need this header.
+    if (extension === ".html") {
+      headers["Content-Security-Policy"] = FRAME_ANCESTORS_CSP;
+    }
+
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   });
 });
@@ -96,10 +122,23 @@ function gracefulShutdown(signal) {
   setTimeout(() => process.exit(1), 3000);
 }
 
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+function startLocalServer() {
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  server.listen(PORT, HOST, () => {
+    console.log(`Summarize This local server running at http://${HOST}:${PORT}/`);
+    console.log(`Open http://${HOST}:${PORT}/connector.html for the Trello connector entrypoint.`);
+  });
+  return server;
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`Summarize This local server running at http://${HOST}:${PORT}/`);
-  console.log(`Open http://${HOST}:${PORT}/connector.html for the Trello connector entrypoint.`);
-});
+module.exports = {
+  safePathname,
+  isPathInsideRoot,
+  resolveFile,
+  startLocalServer
+};
+
+if (require.main === module) {
+  startLocalServer();
+}

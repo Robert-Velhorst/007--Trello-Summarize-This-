@@ -8,7 +8,7 @@ Date: 2026-07-23 (Phase 012)
 - **Models:** gpt-4o, gpt-4o-mini
 - **Status:** Implemented in `ai-providers.js`. Requires `OPENAI_API_KEY`.
 - **Account required:** Yes — https://platform.openai.com
-- **Billing:** Per-token. Cost records tracked in ledger when used.
+- **Billing:** Per-token. The Power-Up retains provider-reported token use; it does not infer a monetary amount from a hardcoded rate table. Cost records require an explicitly trusted cost feed.
 - **Limitations:** Rate limits apply. No image content from card attachments.
 
 ### Anthropic

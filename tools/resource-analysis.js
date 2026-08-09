@@ -3,30 +3,7 @@ const path = require("node:path");
 const SummarizeThis = require("../summarizer-core");
 
 const repoRoot = path.resolve(__dirname, "..");
-const runtimeFiles = [
-  "manifest.json",
-  "connector.html",
-  "trello-runtime-config.js",
-  "connector.js",
-  "popup.html",
-  "settings-powerup.html",
-  "trello-setup.html",
-  "privacy.html",
-  "terms.html",
-  "update.json",
-  "trello-admin-config.js",
-  "attachment-processor.js",
-  "summarizer-core.js",
-  "card-intelligence-ledger.js",
-  "icon.svg",
-  "index.html",
-  "index-original.html",
-  "settings.html",
-  "popup-999-accuracy.html",
-  "popup-enhanced.html",
-  "popup-nextgen.html",
-  "popup-original.html"
-];
+const runtimeFiles = require("../runtime-files.json");
 
 function fileSize(file) {
   return fs.statSync(path.join(repoRoot, file)).size;
@@ -39,8 +16,9 @@ function formatBytes(bytes) {
 }
 
 function walk(dir, files = []) {
+  const excludedDirectories = new Set([".git", ".tmp", ".npm-cache", "dist", "node_modules"]);
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.name === "dist") continue;
+    if (entry.isDirectory() && excludedDirectories.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       walk(full, files);
@@ -54,7 +32,7 @@ function walk(dir, files = []) {
 const runtimeTotal = runtimeFiles.reduce((sum, file) => sum + fileSize(file), 0);
 const sourceFiles = walk(repoRoot);
 const sourceTotal = sourceFiles.reduce((sum, file) => sum + fs.statSync(file).size, 0);
-const activeLoad = ["popup.html", "trello-runtime-config.js", "summarizer-core.js", "card-intelligence-ledger.js", "icon.svg"].reduce((sum, file) => sum + fileSize(file), 0);
+const activeLoad = ["popup.html", "trello-config.js", "summarizer-core.js", "card-intelligence-ledger.js", "icon.svg"].reduce((sum, file) => sum + fileSize(file), 0);
 const deferredAttachmentProcessorLoad = fileSize("attachment-processor.js");
 
 const largeCard = Object.assign({}, SummarizeThis.sampleCardData(), {

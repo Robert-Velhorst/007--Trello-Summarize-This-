@@ -29,11 +29,11 @@ Plain text (`.txt`) and CSV files may be extracted with bounded limits:
 
 ## Upload Safety
 
-The static Power-Up does not accept file uploads. The backend has a `/api/admin/files/upload` stub endpoint that returns `202 Accepted` but does not process multipart content.
+The static Power-Up does not accept file uploads. The backend exposes no upload endpoint; requests to `/api/admin/files/upload` return `404` rather than a simulated acceptance response.
 
 ## Path Traversal Protection
 
-The local dev server (`local-dev-server.js`) uses `path.normalize()` and verifies that the resolved path starts with the server's root directory before serving any file. Verified in `adversarial.test.js`.
+The local dev server (`local-dev-server.js`) decodes and normalizes request paths, rejects malformed encodings, and uses `path.relative()` containment rather than a fragile string-prefix check before serving a file. Verified in `adversarial.test.js`.
 
 ## HTTPS Enforcement
 

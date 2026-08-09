@@ -32,7 +32,11 @@ const CustomPromptManager = require("./custom-prompts");
   "docs/OPERATOR_RUNBOOK.md",
   "docs/CODEX_WORKLOG.md",
   "docs/CODEX_CHECKPOINTS.md",
-  "docs/TASK_GRAPH.md"
+  "docs/TASK_GRAPH.md",
+  "docs/BACKUP_RESTORE.md",
+  "docs/DATA_RECONCILIATION.md",
+  "docs/REQUIREMENTS_TRACEABILITY.md",
+  "docs/WORKER_OPERATIONS.md"
 ].forEach((fileName) => {
   assert.ok(fs.existsSync(path.join(__dirname, fileName)), `${fileName} exists`);
 });
@@ -46,54 +50,60 @@ assert.match(technicalAuditText, /not part of the current shipped Power-Up claim
 
 const completionMatrixText = fs.readFileSync(path.join(__dirname, "docs/GOAL_COMPLETION_MATRIX.md"), "utf8");
 assert.match(completionMatrixText, /\| PDF\/Word\/Excel\/image OCR extraction \| Partial \|/);
-assert.match(completionMatrixText, /\| Trello description writeback \| Missing \|/);
+assert.match(completionMatrixText, /\| Trello description writeback \| Implemented \(local code; live verification pending\) \|/);
 
 const trelloConfigText = fs.readFileSync(path.join(__dirname, "trello-config.js"), "utf8");
 assert.match(trelloConfigText, /SummarizeThisTrelloConfig/);
 assert.match(trelloConfigText, /appKey/);
+assert.match(trelloConfigText, /710f51778ec3e0eff7be947779695aed/, "shared config uses the live Summarize this! Power-Up key");
+assert.doesNotMatch(trelloConfigText, /87f50d5376d860dfac3dfbb42f5c7e79/, "retired duplicate Power-Up key is removed");
+const popupHeadText = fs.readFileSync(path.join(__dirname, "popup.html"), "utf8").split("</head>")[0];
+assert.doesNotMatch(popupHeadText, /attachment-processor\.js/, "attachment processor is deferred until extraction is enabled");
+assert.match(fs.readFileSync(path.join(__dirname, "popup.html"), "utf8"), /ensureAttachmentProcessor/);
+const trelloSetupText = fs.readFileSync(path.join(__dirname, "trello-setup.html"), "utf8");
+assert.match(trelloSetupText, /githubOwner:\s*"Robert-Velhorst"/);
 
-function readPowerShellStringArray(fileName, variableName) {
-  const scriptText = fs.readFileSync(path.join(__dirname, fileName), "utf8");
-  const pattern = new RegExp("\\$" + variableName + "\\s*=\\s*@\\(([\\s\\S]*?)\\)", "m");
-  const match = scriptText.match(pattern);
-  assert.ok(match, `${variableName} array exists in ${fileName}`);
-  return Array.from(match[1].matchAll(/"([^"]+)"/g)).map((item) => item[1]);
-}
-
-const installerBuildRuntimeFiles = readPowerShellStringArray("installer/windows/build-installer.ps1", "RuntimeFiles");
-const installerInstallRuntimeFiles = readPowerShellStringArray("installer/windows/install.ps1", "RuntimeFiles");
-installerBuildRuntimeFiles.forEach((fileName) => {
-  assert.ok(
-    installerInstallRuntimeFiles.includes(fileName),
-    `Windows installer install.ps1 copies runtime file ${fileName}`
-  );
+const runtimeFiles = JSON.parse(fs.readFileSync(path.join(__dirname, "runtime-files.json"), "utf8"));
+assert.equal(runtimeFiles.length, new Set(runtimeFiles).size, "runtime manifest has no duplicates");
+["update.json", "trello-config.js", "authorize.html"].forEach((fileName) => {
+  assert.ok(runtimeFiles.includes(fileName), `runtime manifest packages ${fileName}`);
 });
+assert.ok(!runtimeFiles.includes("trello-runtime-config.js"), "runtime manifest excludes obsolete duplicate Trello config");
+const installerBuildText = fs.readFileSync(path.join(__dirname, "installer/windows/build-installer.ps1"), "utf8");
+const installerInstallText = fs.readFileSync(path.join(__dirname, "installer/windows/install.ps1"), "utf8");
+assert.match(installerBuildText, /runtime-files\.json/);
+assert.match(installerInstallText, /runtime-files\.json/);
 ["Start-SummarizeThis.ps1", "uninstall.ps1"].forEach((fileName) => {
-  assert.ok(
-    installerInstallRuntimeFiles.includes(fileName),
-    `Windows installer install.ps1 copies helper script ${fileName}`
-  );
+  assert.match(installerInstallText, new RegExp(fileName.replace(".", "\\.")), `Windows installer copies helper script ${fileName}`);
 });
-assert.ok(installerBuildRuntimeFiles.includes("update.json"), "Windows installer bundles update manifest");
-assert.ok(installerInstallRuntimeFiles.includes("update.json"), "Windows installer installs update manifest");
 const launcherScriptText = fs.readFileSync(path.join(__dirname, "installer/windows/Start-SummarizeThis.ps1"), "utf8");
 assert.match(launcherScriptText, /\[int\]\$Port\s*=\s*17117/, "Windows launcher supports an explicit QA port while preserving the installed default");
 assert.match(launcherScriptText, /RepoRootCandidate/, "Windows launcher can resolve the repository root when run from installer/windows");
 assert.match(launcherScriptText, /Join-Path \$RepoRootCandidate "popup\.html"/, "Windows launcher serves repo static files during local development");
 const updateManifest = JSON.parse(fs.readFileSync(path.join(__dirname, "update.json"), "utf8"));
 assert.equal(updateManifest.schemaVersion, "summarize-this-update-manifest-v1");
+assert.equal(updateManifest.version, require("./package.json").version, "package and update manifest versions stay aligned");
 assert.equal(updateManifest.version, SummarizeThis.APP_VERSION);
-assert.match(updateManifest.manifestUrl, /^https:\/\/raw\.githubusercontent\.com\/Noodzakelijk-Online\/007--Trello-Summarize-This-\//);
+assert.match(updateManifest.manifestUrl, /^https:\/\/raw\.githubusercontent\.com\/Robert-Velhorst\/007--Trello-Summarize-This-\//);
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+assert.equal(packageJson.main, "index.js");
 assert.equal(packageJson.scripts.start, "node local-dev-server.js");
 assert.equal(packageJson.scripts["start:backend"], "node backend-server.js");
 assert.equal(packageJson.scripts.doctor, "node doctor.js");
 assert.equal(packageJson.scripts["doctor:backend"], "node backend-doctor.js");
 assert.equal(packageJson.scripts.test, "node test.js && node backend.test.js");
+const indexEntryText = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+assert.doesNotMatch(indexEntryText, /Inherited file content will not be shown/);
+assert.match(indexEntryText, /require\("\.\/local-dev-server"\)/);
 const localServerText = fs.readFileSync(path.join(__dirname, "local-dev-server.js"), "utf8");
 assert.match(localServerText, /path\.normalize/);
-assert.match(localServerText, /startsWith\(ROOT\)/);
+assert.match(localServerText, /path\.relative\(ROOT, resolved\)/);
+assert.match(localServerText, /require\.main === module/);
 assert.match(localServerText, /Open http:\/\/\$\{HOST\}:\$\{PORT\}\/connector\.html/);
+const LocalDevServer = require("./local-dev-server");
+assert.equal(LocalDevServer.safePathname("/%E0%A4%A"), null);
+assert.equal(LocalDevServer.resolveFile("/connector.html"), path.join(__dirname, "connector.html"));
+assert.equal(LocalDevServer.isPathInsideRoot(path.resolve(__dirname, "..", `${path.basename(__dirname)}-escape`, "secret.txt")), false);
 const doctorText = fs.readFileSync(path.join(__dirname, "doctor.js"), "utf8");
 assert.match(doctorText, /Doctor checks passed/);
 assert.match(doctorText, /connector\.html/);
@@ -242,13 +252,31 @@ assert.match(popupText, /color-scheme:\s*light dark/);
 assert.match(popupText, /prefers-color-scheme:\s*dark/);
 assert.match(popupText, /function sanitizeUserVisibleError/);
 assert.match(popupText, /Provider message: " \+ sanitizeUserVisibleError\(error\)/);
-assert.match(popupText, /Could not post the comment: " \+ sanitizeUserVisibleError\(error\)/);
+assert.match(popupText, /Could not confirm the Trello comment outcome: " \+ sanitizeUserVisibleError\(error\)/);
+assert.match(popupText, /function trelloCommentAttemptKey/);
+assert.match(popupText, /summarizeThisTrelloCommentAttempts/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "pending"\)/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "posted"\)/);
+assert.match(popupText, /saveTrelloCommentAttempt\(lastCardData\.id, text, "ambiguous"\)/);
+assert.match(popupText, /Check the Trello card manually before posting again/);
+assert.match(popupText, /createTrelloDescriptionDraft/);
+assert.match(popupText, /summarizeThisTrelloDescriptionAttempts/);
+assert.match(popupText, /Checking the current Trello description before updating/);
+assert.match(popupText, /fields=desc/);
+assert.match(popupText, /method: "PUT"/);
+assert.match(popupText, /The Trello description changed since this analysis/);
+assert.match(popupText, /Could not confirm the Trello description outcome/);
 assert.match(popupText, /built-in summarizer/);
 assert.match(popupText, /metadata-only until approval/);
 assert.match(popupText, /Trello app key is not configured for comment lookup/);
 assert.match(popupText, /function maxOutputTokensFor/);
 assert.match(popupText, /maxOutputTokens: maxOutputTokensFor\(settings\)/);
 assert.match(popupText, /max_tokens: maxOutputTokens/);
+assert.match(popupText, /timingTracker: timingTracker/);
+assert.match(popupText, /recordStage\("local-summary", "Local summary", localSummaryStartedAt, nowMs\(\)\)/);
+assert.match(popupText, /recordStage\("ai-provider", "AI provider", providerStartedAt, nowMs\(\)\)/);
+assert.doesNotMatch(popupText, /timingTracker\.mark\("local-summary", "Local summary"\)/);
+assert.doesNotMatch(popupText, /timingTracker\.mark\("ai-provider", "AI provider"\)/);
 assert.match(popupText, /buildRuleBasedAnalysis\(cardData,\s*\{\s*outputLanguage: settings\.outputLanguage\s*\}\)/);
 assert.match(popupText, /id="updatePanel"/);
 assert.match(popupText, /id="checkUpdatesButton"/);
@@ -269,6 +297,13 @@ assert.match(popupText, /id="batchProgressList"/);
 assert.match(popupText, /id="batchManualChecklistFallback"/);
 assert.match(popupText, /id="copyDecisionPacketButton"/);
 assert.match(popupText, /id="exportManualCopyFallback"/);
+assert.match(popupText, /id="aiClaimBoundaryPanel"/);
+assert.match(popupText, /id="aiFactsList"/);
+assert.match(popupText, /id="aiInferencesList"/);
+assert.match(popupText, /id="aiUncertaintyList"/);
+assert.match(popupText, /id="aiUnsupportedClaimsList"/);
+assert.match(popupText, /function renderAiClaimBoundary/);
+assert.match(popupText, /AI-provided statements are shown separately from the card evidence above/);
 assert.match(popupText, /function renderBatchExecutionReview/);
 assert.match(popupText, /function openFirstBatchCard/);
 assert.match(popupText, /function copyBatchManualChecklist/);
@@ -278,6 +313,10 @@ assert.match(popupText, /decisionHandoffPacketForLedgerRun/);
 assert.match(popupText, /function renderBatchProgress/);
 assert.match(popupText, /function updateBatchProgressFromControl/);
 assert.match(popupText, /Batch progress saved privately/);
+assert.match(popupText, /var finalBatchStatus = blockedCount \? "needs-attention" : "review-required"/);
+assert.match(popupText, /card\(s\) analyzed and require human review/);
+assert.match(popupText, /no Trello card was changed/);
+assert.doesNotMatch(popupText, /Selected cards were analyzed, stored privately/);
 assert.match(popupText, /approved .* export is shown below for manual copy/);
 assert.match(popupText, /approved batch handoff report is shown below/);
 assert.match(popupText, /approved manual batch checklist is shown below/);
@@ -427,6 +466,14 @@ assert.equal(explicitBackendSettings.apiBase, "https://powerup.example.com/api")
 assert.equal(explicitBackendSettings.valid, true);
 assert.equal(explicitBackendSettings.derivedFromProxy, false);
 
+const localBackendSettings = SummarizeThis.normalizeBackendSettings({
+  apiBase: "http://127.0.0.1:18787/api/"
+});
+assert.equal(localBackendSettings.apiBase, "http://127.0.0.1:18787/api");
+assert.equal(localBackendSettings.valid, true);
+assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://localhost:18787/api" }).valid, true);
+assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://192.168.1.8:18787/api" }).valid, false);
+
 const derivedBackendSettings = SummarizeThis.normalizeBackendSettings({}, {
   enabled: true,
   endpoint: "https://proxy.example.com/summarize-this/ai"
@@ -448,14 +495,14 @@ assert.equal(SummarizeThis.compareVersions("v1.0.0", "1"), 0);
 assert.equal(SummarizeThis.compareVersions("1.0.0", "1.0.1"), -1);
 const normalizedUpdateManifest = SummarizeThis.normalizeUpdateManifest({
   version: "1.2.3",
-  releaseNotesUrl: "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/releases/tag/v1.2.3",
+  releaseNotesUrl: "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/releases/tag/v1.2.3",
   downloadUrl: "https://evil.example/download.exe",
-  manifestUrl: "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json",
+  manifestUrl: "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json",
   message: "Update available."
 });
 assert.equal(normalizedUpdateManifest.version, "1.2.3");
 assert.equal(normalizedUpdateManifest.downloadUrl, "");
-assert.match(normalizedUpdateManifest.releaseNotesUrl, /github\.com\/Noodzakelijk-Online/);
+assert.match(normalizedUpdateManifest.releaseNotesUrl, /github\.com\/Robert-Velhorst/);
 const availableUpdate = SummarizeThis.evaluateUpdateStatus("1.0.0", normalizedUpdateManifest);
 assert.equal(availableUpdate.updateAvailable, true);
 assert.equal(availableUpdate.upToDate, false);
@@ -894,6 +941,10 @@ const aiSummary = SummarizeThis.normalizeAIAnalysis({
   missingInfo: ["Invoice amount is not in the card"],
   unclearPoints: [{ text: "Card says billing is complete but invoice amount is missing" }],
   unresolvedQuestions: ["Who owns the invoice amount confirmation?"],
+  facts: ["The card includes a billing checklist."],
+  inferences: ["Billing may still need follow-up."],
+  uncertainty: ["The invoice amount is not visible in the card."],
+  unsupportedClaims: ["The client has approved payment."],
   evidenceClaims: [{
     claim: "Billing is still open",
     source: "checklist",
@@ -916,6 +967,10 @@ assert.deepEqual(aiSummary.unclearPoints, ["Card says billing is complete but in
 assert.deepEqual(aiSummary.unresolvedQuestions, ["Who owns the invoice amount confirmation?"]);
 assert.equal(aiSummary.evidenceClaims[0].claim, "Billing is still open");
 assert.equal(aiSummary.validationFindings[0], "Attachment contents were not verified");
+assert.deepEqual(aiSummary.facts, ["The card includes a billing checklist."]);
+assert.deepEqual(aiSummary.inferences, ["Billing may still need follow-up."]);
+assert.deepEqual(aiSummary.uncertainty, ["The invoice amount is not visible in the card."]);
+assert.deepEqual(aiSummary.unsupportedClaims, ["The client has approved payment."]);
 assert.equal(aiSummary.confidenceReason, "Description and checklist are present.");
 assert.equal(aiSummary.confidence, "high");
 
@@ -1168,7 +1223,8 @@ const aiStructuredRun = CardIntelligenceLedger.createAnalysisRun(operationalCard
     model: "gpt-4o-mini",
     tokens: 500,
     cost: 0.001
-  }
+  },
+  source: "ai"
 }, {
   now: "2026-06-29T12:01:00.000Z"
 });
@@ -1181,6 +1237,12 @@ assert.ok(aiStructuredRun.result.missingInfo.some(item => item.text.includes("In
 assert.ok(aiStructuredRun.result.unresolvedQuestions.some(item => item.text.includes("Who owns the invoice amount confirmation")));
 assert.ok(aiStructuredRun.result.evidenceClaims.some(item => item.claim.includes("Billing is still open")));
 assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Attachment contents")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.id === "ai-output-unverified"));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Inference (not a verified fact)")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Uncertainty:")));
+assert.ok(aiStructuredRun.result.validationFindings.some(item => item.text.includes("Unsupported claim:")));
+assert.ok(aiStructuredRun.result.evidenceClaims.every(item => item.confidence === "uncertain"));
+assert.deepEqual(aiStructuredRun.result.inferences, ["Billing may still need follow-up."]);
 assert.equal(aiStructuredRun.result.confidenceReason, "Description and checklist are present.");
 
 const history = CardIntelligenceLedger.mergeLedgerHistory([], { lastRun: run }, 25);
@@ -1511,6 +1573,14 @@ assert.ok(trelloCommentDraft.includes("Source coverage:"));
 assert.ok(trelloCommentDraft.includes("Review note:"));
 assert.ok(trelloCommentDraft.length <= 4000);
 
+const trelloDescriptionDraft = CardIntelligenceLedger.createTrelloDescriptionDraft(run);
+assert.ok(trelloDescriptionDraft.includes("## Operational summary"));
+assert.ok(trelloDescriptionDraft.includes("### Current status"));
+assert.ok(trelloDescriptionDraft.includes("### Next actions"));
+assert.ok(trelloDescriptionDraft.includes("### Review note"));
+assert.match(trelloDescriptionDraft, /not verified fact/i);
+assert.ok(trelloDescriptionDraft.length <= 6028);
+
 const adminConfig = TrelloAdminConfig.createAdminConfig({
   name: "Summarize This",
   details: "Evidence-backed Trello card intelligence.",
@@ -1523,7 +1593,7 @@ const adminConfig = TrelloAdminConfig.createAdminConfig({
   icon: { url: "./icon.svg" },
   capabilities: ["card-buttons", "show-settings"]
 }, "https://powerup.example.com/app/");
-assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260719.3");
+assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260809.1");
 assert.equal(adminConfig.manifestUrl, "https://powerup.example.com/app/manifest.json");
 assert.equal(adminConfig.iconUrl, "https://powerup.example.com/app/icon.svg");
 assert.equal(adminConfig.privacyUrl, "https://powerup.example.com/app/privacy.html");
@@ -1531,7 +1601,7 @@ assert.equal(adminConfig.termsUrl, "https://powerup.example.com/app/terms.html")
 assert.deepEqual(adminConfig.capabilities, ["card-buttons", "show-settings"]);
 
 const adminValuesText = TrelloAdminConfig.makeAdminValuesText(adminConfig);
-assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260719.3"));
+assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260809.1"));
 assert.ok(adminValuesText.includes("Manifest URL: https://powerup.example.com/app/manifest.json"));
 assert.ok(adminValuesText.includes("Privacy policy URL: https://powerup.example.com/app/privacy.html"));
 assert.ok(adminValuesText.includes("Terms of service URL: https://powerup.example.com/app/terms.html"));
@@ -1602,7 +1672,7 @@ assert.equal(JSON.stringify(adminSetupPackage).includes("support@example.com"), 
 assert.doesNotMatch(JSON.stringify(adminSetupPackage), /sk-[a-z0-9]/i);
 
 const adminAutofillScript = TrelloAdminConfig.createAdminAutofillScript(adminConfig);
-assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260719.3"));
+assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260809.1"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/manifest.json"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/privacy.html"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/terms.html"));
@@ -1671,11 +1741,14 @@ const githubDeploymentGuide = TrelloAdminConfig.createDeploymentGuide(
 assert.equal(githubDeploymentGuide.label, "GitHub Pages");
 assert.ok(githubDeploymentGuide.actionUrl.includes("/settings/pages"));
 assert.ok(githubDeploymentGuide.requiredFiles.includes("connector.js"));
+assert.ok(githubDeploymentGuide.requiredFiles.includes("trello-config.js"));
+assert.ok(githubDeploymentGuide.requiredFiles.includes("authorize.html"));
 assert.ok(githubDeploymentGuide.requiredFiles.includes("privacy.html"));
 assert.ok(githubDeploymentGuide.requiredFiles.includes("terms.html"));
 assert.ok(githubDeploymentGuide.verification.some((item) => item.includes("manifest.json")));
 assert.ok(githubDeploymentGuide.verification.some((item) => item.includes("privacy.html") && item.includes("terms.html")));
-assert.ok(githubDeploymentGuide.resourceNote.includes("No server"));
+assert.ok(githubDeploymentGuide.resourceNote.includes("core Power-Up is static"));
+assert.ok(githubDeploymentGuide.resourceNote.includes("optional backend"));
 
 const deploymentGuideText = TrelloAdminConfig.makeDeploymentGuideText(githubDeploymentGuide);
 assert.ok(deploymentGuideText.includes("Summarize This deployment guide"));
@@ -2084,8 +2157,10 @@ async function runAsyncTests() {
     assert.equal(proxyBody.summary.about, "Proxy generated summary.");
     assert.equal(proxyBody.metadata.provider, "OpenAI via proxy");
     assert.equal(proxyBody.metadata.tokens, 150);
+    assert.equal(proxyBody.metadata.cost, null);
+    assert.equal(proxyBody.metadata.costEstimated, false);
     assert.equal(providerCall.url, "https://api.openai.com/v1/chat/completions");
-    assert.equal(JSON.parse(providerCall.options.body).max_tokens, 1200);
+    assert.equal(JSON.parse(providerCall.options.body).max_completion_tokens, 1200);
     assert.match(providerCall.options.headers.Authorization, /sk-proxy-secret-openai/);
     assert.doesNotMatch(JSON.stringify(proxyBody), /sk-proxy-secret-openai/);
   } finally {
@@ -2157,7 +2232,7 @@ async function runAsyncTests() {
 
   provider.setApiKey("openai", "sk-test-openai-hardening");
   await provider.callOpenAI("gpt-4o-mini", "", providerCardData);
-  assert.equal(providerCalls[providerCalls.length - 1].body.max_tokens, provider.maxOutputTokens);
+  assert.equal(providerCalls[providerCalls.length - 1].body.max_completion_tokens, provider.maxOutputTokens);
 
   provider.setApiKey("anthropic", "sk-test-anthropic-hardening");
   await provider.callAnthropic("claude-3-haiku-20240307", "", providerCardData);

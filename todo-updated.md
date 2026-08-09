@@ -1,5 +1,7 @@
 # Multi-AI Trello Power-Up - Complete Todo List
 
+> Historical note: this todo list reflects an earlier planning pass and includes goals that are still partial, blocked, or out of current shipped scope. Use the audit and verification documents under `docs/` for the current verified status.
+
 ## 🎯 Goal: Achieve full production-ready functionality for the Multi-AI Trello Power-Up, addressing all identified issues and completing all necessary features.
 
 ---
@@ -63,5 +65,4 @@
 - [ ] Implement a simple user account system to save API keys and preferences.
 - [ ] Use a secure method to store user data (e.g., browser local storage with encryption).
 - [ ] Allow users to view their analysis history and past results.
-
 

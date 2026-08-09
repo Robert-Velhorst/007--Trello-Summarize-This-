@@ -28,8 +28,8 @@ Error: Backend startup blocked. Missing required environment variables: JWT_SECR
 
 The server exits with code 1 before accepting any requests.
 
-Required: `JWT_SECRET`, `ADMIN_PASSWORD`
-Optional (with graceful degradation): `DATABASE_URL`, `STRIPE_SECRET_KEY`, `TRELLO_APP_KEY`, provider keys
+Required: `JWT_SECRET` (minimum 32 characters), `ADMIN_PASSWORD` (minimum 12 characters)
+Ignored/not active: `DATABASE_URL`, `STRIPE_SECRET_KEY`; optional for the local backend: `TRELLO_APP_KEY`, provider keys. Setting `DATABASE_URL` does not enable a database backend; an explicit non-local store request is rejected.
 
 ## Local Dev Server Startup
 
@@ -38,7 +38,7 @@ Optional (with graceful degradation): `DATABASE_URL`, `STRIPE_SECRET_KEY`, `TREL
 ## Doctor Commands
 
 ```bash
-npm run doctor           # Verifies 30 checks including file existence, module loading, Node.js version
+npm run doctor           # Verifies required files, operations routes, module loading, and Node.js version
 npm run doctor:backend   # Verifies env vars, proxy shape, Trello key presence
 ```
 

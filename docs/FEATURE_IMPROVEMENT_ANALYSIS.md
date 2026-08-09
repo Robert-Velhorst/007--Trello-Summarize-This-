@@ -218,7 +218,7 @@ Status: Implemented across active and legacy client-side modules.
 
 ### 5f.1. Local Preview API Key Containment
 
-Status: Implemented in `settings-powerup.html`, `popup.html`, and `summarizer-core.js`.
+Status: Partial. The settings and evaluation logic are implemented in `settings-powerup.html`, `popup.html`, and `summarizer-core.js`, but direct providers do not expose a trusted monetary cost feed.
 
 - Trello runtime continues to save provider API keys only through member-private Power-Up storage.
 - Standalone/local preview saves non-key settings only and clears provider key fields after saving.
@@ -380,8 +380,8 @@ Implemented:
 
 - Settings now supports per-provider monthly budget limits for OpenAI, Google AI, and Anthropic.
 - The warning threshold is configurable at 50%, 75%, 80%, 90%, or 100%.
-- Completed AI runs write compact member-private cost records with provider, model, token count, cost estimate, card id/title, run id, and timestamp.
-- The popup evaluates the current run against the current-month provider budget and shows a visible warning or exceeded alert when applicable.
+- Completed AI runs write compact member-private cost records only when a trusted integration explicitly supplies a cost value; direct-provider runs retain token counts but do not use hardcoded pricing assumptions.
+- The popup evaluates a current run against the current-month provider budget only when an explicit trusted cost value is available.
 - Local-only runs and providers without configured limits do not create budget noise.
 
 Impact: Medium. This reduces surprise API spend without blocking analysis or adding a backend.

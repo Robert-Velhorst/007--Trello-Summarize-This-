@@ -25,16 +25,17 @@ Previous: 2026-07-10
 | Run proxy summary | Wired | Via configured proxy endpoint |
 | Run consensus AI | Wired | Multi-provider consensus mode |
 | Display confidence and evidence | Wired | Quality score, structured findings, evidence claims, validation |
+| Display AI claim boundary | Wired | Model-reported facts, inferences, uncertainty, and unsupported claims are displayed separately from source evidence and require human review |
 | Display attachment facts | Wired | Category, extraction status, preview |
 | Save analysis to ledger | Wired | Stored privately via Trello member-private storage |
 | View ledger history | Wired | Previous runs listed with run details |
 | Copy/export summary | Wired | Markdown, JSON, VA handoff, change brief, decision packet |
 | Draft Trello comment | Wired | Approval-gated — requires explicit tick before post |
-| Post Trello comment | Wired | Only after approval tick; sanitized error on failure |
+| Post Trello comment | Wired | Only after approval tick; exact draft attempts are privately tracked as pending/posted/ambiguous, and ambiguous outcomes block blind reposting |
 | Submit feedback (rating + correction) | Wired | Stored in ledger; surfaced in next AI prompt |
 | Check for updates | Wired | Manual trigger only (not auto on load); secure URL validation |
 | Batch analysis plan | Wired | Generates plan from list context |
-| Batch execution review | Wired | Manual-first; no automatic unattended execution |
+| Batch execution review | Wired | Explicit AI-handoff approval is required before controlled popup processing; results are stored as review-required and Trello writes remain off |
 | Track batch progress | Wired | Progress saved privately per-card |
 | Copy batch checklist | Wired | Exports manual batch checklist |
 | Copy batch handoff report | Wired | Exports batch progress report |
@@ -70,9 +71,9 @@ Previous: 2026-07-10
 ## Hidden or Removed UI Actions
 
 - No actions are hidden that would appear active to the user.
-- `startBatch()` automatic execution is explicitly absent from popup (verified in test.js assert.doesNotMatch).
+- No unapproved or background batch execution path exists; the reviewed popup runner only starts after explicit AI-handoff approval and keeps Trello writes off.
 - `DOMContentLoaded -> checkForUpdates()` auto-trigger is explicitly absent (verified in test.js).
-- Card description writeback has no UI entry point — it is simply not implemented.
+- Card description replacement has a dedicated editable draft, approval checkbox, final confirmation, source-freshness check, and durable pending/ambiguous outcome protection. It remains pending live Trello verification.
 
 ## Phase 115 Changes
 

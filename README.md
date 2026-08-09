@@ -1,11 +1,13 @@
 # Summarize This - Evidence-Backed Trello Card Analysis
 
-[![Confidence](https://img.shields.io/badge/Confidence-Evidence--based-blue)](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)
+[![Confidence](https://img.shields.io/badge/Confidence-Evidence--based-blue)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Trello Power-Up](https://img.shields.io/badge/Trello-Power--Up-0079BF)](https://trello.com/power-ups)
-[![AI Powered](https://img.shields.io/badge/AI-Powered-purple)](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)
+[![AI Powered](https://img.shields.io/badge/AI-Powered-purple)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
+
+> Version 1.1.0 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with a bundled loopback backend. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
 
 ---
 
@@ -17,15 +19,14 @@ The current shipped product is the browser-based Power-Up flow in `connector.js`
 
 The active product currently provides:
 
-- 📊 **Evidence-Based Confidence** - Multi-layer validation explains when analysis needs review
-- 🎯 **Confidence Scoring** - Know exactly when to trust the analysis
-- 🔍 **Error Detection** - Automatic quality checks catch mistakes
-- 👥 **Human Review** - Smart review system for low-confidence analyses
-- 📈 **Continuous Learning** - System improves from every interaction
-- ⚡ **Real-Time Analysis** - Results in 10-30 seconds
-- 🌐 **Multi-AI Support** - Direct-provider mode and optional proxy mode
+- 📊 **Evidence and review signals** — source-derived evidence plus validation findings that identify missing context and review needs
+- 🎯 **Deterministic local fallback** — a local summary when no provider is configured
+- 🤖 **Optional AI paths** — direct-provider and proxy configurations initiated from the reviewed browser workflow
+- 👥 **Private review and feedback records** — member-private ledger history, review state, and feedback
+- 🧭 **Claim boundaries** — facts, inferences, uncertainty, and unsupported claims are presented separately
+- 📤 **Operator-controlled exports** — copy/export flows, with Trello comment posting behind explicit approval
 
-The repository also contains experimental, legacy, or disconnected backend/admin files. Those are not part of the shipped Power-Up unless the audit documents in `docs/` explicitly mark them active.
+The backend is part of the shipped product when persistence, batch job state, or HAI export is enabled. The deterministic browser summarizer continues to work without it.
 
 ---
 
@@ -41,14 +42,13 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 - **Mobile Responsive** - Works on all devices
 - **Dark Mode Ready** - Professional, modern UI
 
-### 🎯 Confidence and Validation System
+### 🎯 Confidence and Review Signals
 
-- **Confidence Scoring** - 5-factor confidence calculation (0-100%)
-- **Error Detection** - 4 types: factual, logical, completeness, hallucinations
-- **Ground Truth Validation** - Optional benchmark support when known-good analyses exist
-- **Human Review System** - Collect feedback and learn from corrections
-- **Accuracy Dashboard** - Track metrics and trends
-- **Quality Indicators** - Visual confidence bars and alerts
+- **Confidence Scoring** - Evidence/completeness-based review signal
+- **Validation Findings** - Missing context, unsupported claims, attachment limits, and review-needed cases
+- **Claim Boundaries** - Facts, inferences, uncertainty, and unsupported claims shown separately
+- **Human Review System** - Private review state and feedback capture
+- **Quality Indicators** - Visible confidence and validation cues; not an accuracy measurement
 
 ### Current Product Limits
 
@@ -56,30 +56,30 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 - **Binary attachments remain partial** - PDF, Word, Excel, and image OCR are not fully extracted in the shipped flow
 - **Batch support is manual-first** - The popup prepares and reviews queue items, but does not run unattended full-card batch analysis
 - **Confidence is a review signal** - It is not a measured guarantee of correctness
-- **Trello writeback is gated** - Comment posting requires explicit review and approval; card description writeback is not implemented
+- **Trello writes are gated** - Comment posting and description replacement require explicit review and confirmation; description updates also check for a changed source before writing
 
 ---
 
 ## 🎬 Demo
 
-### High Confidence Analysis
+### Illustrative Analysis Output
 ```
 ┌────────────────────────────────────────────────┐
-│ 🧠 AI Analysis - Evidence Confidence          │
+│ 🧠 Analysis — review required                  │
 ├────────────────────────────────────────────────┤
-│ Analysis Confidence: 94%                       │
-│ ████████████████████░░░░ HIGH                  │
+│ Confidence is a heuristic review signal        │
+│ Source context: card description + checklist   │
 │                                                │
-│ ✓ No errors detected                          │
-│ ✓ Validated against ground truth              │
+│ Facts are separated from inferences            │
+│ Verify the card before taking action           │
 │                                                │
 │ 📝 What This Card Is About                    │
-│ Implementing user authentication with OAuth2  │
-│ and JWT tokens for secure API access...       │
+│ Implementing account access and session        │
+│ handling for an example card...                │
 │                                                │
 │ 🎯 Current Status                             │
 │ 60% complete (3 of 5 checklist items done)    │
-│ On track, due in 3 days                       │
+│ Timing and completeness require review         │
 │                                                │
 │ ✅ Next Steps                                 │
 │ 1. Complete token refresh logic               │
@@ -87,13 +87,13 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 │ 3. Write integration tests                    │
 │                                                │
 │ 💡 Key Insights                               │
-│ • Backend work ahead of schedule              │
-│ • Testing is the critical path                │
-│ • No blockers identified                      │
+│ • Inference: testing may be a critical path   │
+│ • Uncertainty: no external status verified    │
+│ • Unsupported claims are shown separately     │
 │                                                │
-│ 📊 Accuracy Metrics                           │
-│ Confidence: 94% | Errors: 0                   │
-│ Validation: 96% | Review needed: no           │
+│ 📊 Operator Check                             │
+│ Do not treat this as accuracy measurement      │
+│ Review needed: yes                             │
 └────────────────────────────────────────────────┘
 ```
 
@@ -101,36 +101,29 @@ The repository also contains experimental, legacy, or disconnected backend/admin
 
 ## 🚀 Quick Start
 
+### Windows 11
+
+1. Download `SummarizeThisSetup.exe` from the current GitHub release or CI artifact.
+2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets.
+3. Open **Summarize This** from the Start menu for the standalone local app.
+4. Open **Configure Trello Power-Up** to get the exact hosted connector URL.
+5. Open **Share Backend with ngrok** only when Trello or HAI needs to reach the local backend over HTTPS.
+
+The installer does not require Node.js, Docker, or administrator rights. ngrok is optional and is not started automatically.
+
 ### 1. Deploy the Power-Up (3 minutes)
 
-**Option A: Netlify (Recommended)**
-```bash
-# Clone the repository
-git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
+GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
 
-# Deploy to Netlify
-cd 007--Trello-Summarize-This-
-# Drag folder to https://app.netlify.com/drop
-```
-
-**Option B: Vercel**
-```bash
-npm install -g vercel
-cd 007--Trello-Summarize-This-
-vercel
-```
-
-**Option C: GitHub Pages**
-- Enable Pages in repository Settings → Pages
-- Deploy from `main` branch
+`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260809.1`
 
 ### 2. Register as Trello Power-Up (4 minutes)
 
 1. Go to https://trello.com/power-ups/admin
-2. Click "Create New Power-Up"
+2. Open the existing **Summarize This** Power-Up or create it once.
 3. Fill in details:
    - **Name**: Summarize This
-   - **Connector URL**: `https://your-url.com/connector.js`
+   - **Connector URL**: the hosted `connector.html` URL above
    - **Capabilities**: `card-buttons`, `show-settings`, `authorization-status`
 4. Save
 
@@ -170,6 +163,7 @@ vercel
 - [**Final Verification Report**](docs/FINAL_VERIFICATION_REPORT.md) - Current evidence and open gaps
 - [**Roadmap and Blocked Items**](docs/ROADMAP_AND_BLOCKED_ITEMS.md) - Best next steps and current blockers
 - [**Improvement Roadmap**](NEXT_LEVEL_IMPROVEMENTS.md) - Future enhancements
+- [**HAI Connector**](docs/HAI_CONNECTOR.md) - Review-gated private feed and HAI setup
 - [**Power-Up README**](POWERUP_README.md) - Power-Up specific docs
 
 ### API Documentation
@@ -201,31 +195,31 @@ vercel
 │  └──────────────────────────────────────────┘  │
 │                     ↓                           │
 │  ┌──────────────────────────────────────────┐  │
-│  │  2. AI Analysis                          │  │
-│  │     • OpenAI / Anthropic / Google        │  │
-│  │     • Chain-of-thought reasoning         │  │
-│  │     • Multi-model consensus (optional)   │  │
+│  │  2. Local or Optional AI Analysis        │  │
+│  │     • Local deterministic fallback       │  │
+│  │     • Optional configured provider path  │  │
+│  │     • Human review before action         │  │
 │  └──────────────────────────────────────────┘  │
 │                     ↓                           │
 │  ┌──────────────────────────────────────────┐  │
-│  │  3. Accuracy System                      │  │
-│  │     • Confidence scoring (5 factors)     │  │
-│  │     • Error detection (4 types)          │  │
-│  │     • Ground truth validation            │  │
+│  │  3. Evidence and Review Signals          │  │
+│  │     • Evidence and completeness checks   │  │
+│  │     • Facts vs. inferences               │  │
+│  │     • Explicit uncertainty                │  │
 │  └──────────────────────────────────────────┘  │
 │                     ↓                           │
 │  ┌──────────────────────────────────────────┐  │
-│  │  4. Quality Assurance                    │  │
-│  │     • Human review (if needed)           │  │
-│  │     • Self-correction                    │  │
-│  │     • Continuous learning                │  │
+│  │  4. Operator Review                      │  │
+│  │     • Review state and feedback          │  │
+│  │     • Approval-gated Trello comments     │  │
+│  │     • No automatic learning claim        │  │
 │  └──────────────────────────────────────────┘  │
 │                     ↓                           │
 │  ┌──────────────────────────────────────────┐  │
 │  │  5. Results Display                      │  │
 │  │     • Confidence indicator               │  │
 │  │     • Analysis sections                  │  │
-│  │     • Accuracy metrics                   │  │
+│  │     • Review and validation details      │  │
 │  │     • Export options                     │  │
 │  └──────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────┘
@@ -281,11 +275,9 @@ Overall Confidence =
 - Font Awesome icons
 
 ### AI Providers
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude 3.5)
-- Google (Gemini)
-- Cohere
-- Perplexity
+- OpenAI, Anthropic, and Google paths in `ai-providers.js`, when configured by the operator
+- Optional Cloudflare Worker proxy reference implementation
+- Local deterministic fallback when no provider is configured
 
 ### Libraries & Tools
 - Optional bounded text/CSV extraction for small HTTPS attachments
@@ -295,25 +287,11 @@ Overall Confidence =
 
 ---
 
-## 📊 Performance
+## 📊 Performance and Cost
 
-### Speed
-- Simple cards: 10-15 seconds
-- Complex cards: 20-30 seconds
-- With attachments: 30-45 seconds
-- Batch processing: 5-10 cards/minute
+No production performance benchmark, throughput target, cost guarantee, or measured accuracy result is currently verified. Provider latency and cost depend on the configured model, card contents, attachment policy, network, and external provider account. The shipped batch workflow is manual-first and must not be treated as unattended throughput.
 
-### Cost
-- Single model: $0.002-0.005 per analysis
-- Multi-model: $0.010-0.020 per analysis
-- With attachments: $0.015-0.030 per analysis
-- Average: $0.005-0.010 per analysis
-
-### Confidence
-- Confidence score: calculated per analysis from observable evidence and completeness
-- Review needed: shown for low-confidence or high-risk analyses
-- Attachment limits: shown when files are metadata-only or extraction failed
-- Human feedback: stored privately for later reanalysis guidance
+Confidence is calculated from available evidence and completeness as a review signal. Attachment limits and validation findings are surfaced when available, and private human feedback can guide later reanalysis; none of these are a measured accuracy guarantee.
 
 ## Verification Status
 
@@ -329,7 +307,7 @@ Overall Confidence =
 
 ```bash
 # Clone repository
-git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
+git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
 cd 007--Trello-Summarize-This-
 
 # No build step required - pure HTML/CSS/JS
@@ -368,7 +346,7 @@ cd 007--Trello-Summarize-This-
 
 ```bash
 # Run automated tests
-node test-suite.js
+npm test
 
 # Test with real Trello data
 # 1. Configure API keys in settings
@@ -427,40 +405,37 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 ### Documentation
-- [Quick Start Guide](QUICK_START_GUIDE.md)
-- [User Guide](USER_GUIDE.md)
-- [Deployment Guide](FINAL_DEPLOYMENT_GUIDE.md)
-- [Technical Docs](999_ACCURACY_IMPLEMENTATION.md)
+- [Operator Runbook](docs/OPERATOR_RUNBOOK.md)
+- [Goal Completion Matrix](docs/GOAL_COMPLETION_MATRIX.md)
+- [Final Verification Report](docs/FINAL_VERIFICATION_REPORT.md)
 
 ### Issues
-Found a bug or have a feature request? [Open an issue](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues)
+Found a bug or have a feature request? [Open an issue](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)
 
 ### Community
-- 💬 Discussions: [GitHub Discussions](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/discussions)
+- 💬 Discussions: [GitHub Discussions](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/discussions)
 - 📧 Email: Submit feedback at https://help.manus.im
 
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ Completed
-- Core AI analysis
-- Evidence-based confidence system
-- 20 advanced improvements
-- Multi-AI provider support
-- Confidence scoring
-- Error detection
-- Human review system
-- Ground truth validation
-- Continuous learning
+### ✅ Verified local scope
+- Browser Power-Up card analysis and deterministic fallback
+- Optional configured AI/provider paths
+- Evidence/review signals, private review state, feedback, and exports
+- Explicit claim-boundary display and approval-gated comment posting
+- Durable reviewed local worker, reminders, workspace roles, search/pagination, backups, reconciliation, and redacted support diagnostics
+- Windows 11 installer and hardened single-instance Docker backend artifacts
 
-### 🚧 In Progress
-- Mobile app (iOS/Android)
-- Team collaboration features
-- Advanced analytics dashboard
+### 🚧 Partial or not shipped
+- Binary attachment extraction (PDF, Office, and image OCR)
+- Live re-verification of description replacement and public deployment
+- Measured accuracy and production performance evidence
 
-### 📋 Planned
-- User accounts and cloud sync
+### 📋 External requirements
+- Live provider credentials, public HTTPS hosting, and Trello listing approval
+- Multi-instance production database/queue, offsite disaster recovery, managed secrets, and payment integration
 - API for third-party integrations
 - Slack/Teams integration
 - Custom AI model fine-tuning
@@ -470,20 +445,20 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 
 ## 📈 Stats
 
-![GitHub stars](https://img.shields.io/github/stars/Noodzakelijk-Online/007--Trello-Summarize-This-?style=social)
-![GitHub forks](https://img.shields.io/github/forks/Noodzakelijk-Online/007--Trello-Summarize-This-?style=social)
-![GitHub issues](https://img.shields.io/github/issues/Noodzakelijk-Online/007--Trello-Summarize-This-)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/Noodzakelijk-Online/007--Trello-Summarize-This-)
+![GitHub stars](https://img.shields.io/github/stars/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Robert-Velhorst/007--Trello-Summarize-This-)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/Robert-Velhorst/007--Trello-Summarize-This-)
 
 ---
 
-## 🎉 Success Stories
+## Example Uses
 
-> "Summarize This has transformed how our team handles sprint planning. The confidence scoring helps us identify cards that need more detail before we start work." - **Product Manager, Tech Startup**
+These are illustrative uses, not customer testimonials:
 
-> "The confidence and review signals help us separate supported facts from assumptions before acting." - **Operations Lead**
-
-> "Best Trello Power-Up we've ever used. The AI insights help us prioritize better and the batch processing saves hours every week." - **Project Manager, Agency**
+- Use confidence and review signals to identify cards needing more detail before work starts.
+- Separate supported facts from assumptions before acting on a summary.
+- Prepare a reviewed batch-analysis plan while keeping Trello writes off by default.
 
 ---
 
@@ -491,7 +466,7 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 
 ### Made with ❤️ for better project management
 
-**[Get Started](FINAL_DEPLOYMENT_GUIDE.md)** • **[Documentation](USER_GUIDE.md)** • **[GitHub](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-)** • **[Issues](https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues)**
+**[Get Started](FINAL_DEPLOYMENT_GUIDE.md)** • **[Documentation](USER_GUIDE.md)** • **[GitHub](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)** • **[Issues](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)**
 
 ---
 
@@ -499,6 +474,6 @@ Found a bug or have a feature request? [Open an issue](https://github.com/Noodza
 
 **Version**: 3.0 (Confidence and Validation System)
 **Last Updated**: January 31, 2026  
-**Status**: Production Ready
+**Status**: Verified local Power-Up scope; not production-ready
 
 </div>

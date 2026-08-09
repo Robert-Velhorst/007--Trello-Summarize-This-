@@ -1,13 +1,19 @@
 # Security
 
-Date: 2026-07-23 (Phase 115)
+Date: 2026-08-09
 
 ## Credential Handling
 
 **Critical rules:**
 - API keys (OpenAI, Anthropic, Google) are stored in browser member-private Trello storage only. They are never logged or transmitted to the Trello server.
 - Proxy endpoint credentials are configured separately from browser-held keys.
-- Backend JWT secret and admin password must be provided as environment variables — never hardcoded.
+- Backend session-hash secret (`JWT_SECRET`, retained environment-variable name; minimum 32 characters) and admin password (minimum 12 characters) must be provided as environment variables — never hardcoded.
+- The backend creates no default end-user account or predictable bootstrap password. Users must register explicitly; tests use disposable, isolated accounts.
+- Account emails are normalized and validated at registration and admin edit time; duplicate identities are rejected.
+- Registration passwords are bounded to 12-256 characters and processed with asynchronous scrypt. Unknown-user login performs equivalent scrypt work, and admin credential comparisons use timing-safe digests.
+- User data exports exclude password hashes, password salts, and sessions. Account deletion cascades owner-scoped data.
+- The local backend store uses owner-only permissions (`0700` directory and `0600` file) on POSIX. The Windows installer creates generated secrets in an inheritance-disabled, current-user-only ACL file.
+- PostgreSQL mode uses a bounded pool, optional certificate-verified TLS, optimistic revisions, and a per-table advisory lock so a second writer fails closed.
 - The `proxy/.dev.vars` file is `.gitignore`d and must never be committed.
 - Error messages are sanitized in all three integration modules (`ai-providers.js`, `trello-integration.js`, `attachment-processor.js`) to strip tokens, keys, and sensitive URLs before display.
 
@@ -45,28 +51,35 @@ The backend API (`backend-app.js`) now sends:
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: no-referrer`
-- CORS headers with preflight handling
+- CORS headers with preflight handling only for an explicit allowlist (`BACKEND_ALLOWED_ORIGINS`); arbitrary browser origins are rejected before route handling
+- A 1 MiB request limit that stops buffering immediately after overflow
+- Exclusive runtime locking so backend, worker, and CLI cannot concurrently overwrite the JSON state file
+- Idempotency on summary, batch creation, backup creation, and credit mutations
+- Bounded sessions, events, jobs, notifications, rate windows, and backup retention
+- Per-user HAI capability URLs with HMAC-only token storage, immediate rotation/revocation, owner filtering, and explicit summary approval
+- Non-root Docker execution, dropped Linux capabilities, `no-new-privileges`, loopback Compose binding, and no embedded secrets
 
 ## Known Security Gaps (Not Production-Safe)
 
 | Gap | Risk | Mitigation Required |
 |---|---|---|
-| Backend stores passwords in plaintext | High | Add bcrypt or argon2 hashing before production deployment |
-| In-memory token store | Medium | Lost on restart; add persistent session store for production |
-| No rate limiting on API endpoints | Medium | Add rate limiting middleware before production deployment |
+| Admin auth relies on environment credentials | High | Use managed secrets and production identity controls before internet exposure |
+| Whole-state PostgreSQL document | Medium | Safe for one writer; normalize tables and use transactional row-level operations before horizontal multi-writer scaling |
+| Process-local and persisted rate limits | Medium | Add a distributed gateway limiter before multi-instance deployment |
+| Local backups are not offsite disaster recovery | Medium | Copy encrypted snapshots to owner-controlled remote storage and test a live restore |
 | No HTTPS enforcement in backend | Medium | Run behind reverse proxy (nginx/caddy) with TLS |
-| Backend CORS allows all origins | Low (dev only) | Restrict to known origins in production |
+| Hosted Power-Up origin must be configured | Medium | Set `BACKEND_ALLOWED_ORIGINS` to the exact public Power-Up origin before enabling browser backend calls |
 
 ## Update Check Safety
 
 - Update manifests are fetched with `credentials: "omit"` and `referrerPolicy: "no-referrer"`.
-- Only URLs from `github.com/Noodzakelijk-Online/007--Trello-Summarize-This-` or `raw.githubusercontent.com` are accepted.
+- Only URLs from `github.com/Robert-Velhorst/007--Trello-Summarize-This-` or its exact `raw.githubusercontent.com` path are accepted.
 - Download URLs from any other domain are rejected by `safeUpdateUrl()` in `summarizer-core.js`.
 - Update checks are not triggered automatically on page load.
 
 ## No Secrets Committed
 
-Verified on 2026-07-23:
-- `.gitignore` covers `.npm-cache/`, `.tmp/`, and `proxy/.dev.vars`.
+Verified on 2026-08-09:
+- `.gitignore` covers `node_modules/`, build staging, `.npm-cache/`, `.tmp/`, runtime data, and `proxy/.dev.vars`.
 - No API keys, tokens, or credentials appear in committed source files.
-- `trello-config.js` contains a placeholder comment, not a real key.
+- `trello-config.js` contains the public Trello application key required by the browser flow, never the private Trello secret.

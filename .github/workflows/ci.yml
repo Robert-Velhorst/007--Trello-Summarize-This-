@@ -10,6 +10,22 @@ jobs:
   test:
     name: Test suite
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: summarize_this_test
+          POSTGRES_USER: summarize_this_test
+          POSTGRES_PASSWORD: summarize_this_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U summarize_this_test -d summarize_this_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql://summarize_this_test:summarize_this_test_password@127.0.0.1:5432/summarize_this_test
     strategy:
       matrix:
         node-version: [20.x, 22.x]
@@ -25,16 +41,37 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --prefer-offline
+        run: npm ci --omit=dev --prefer-offline
 
       - name: Run core tests
         run: node test.js
 
+      - name: Verify production static package
+        run: node static-site.test.js
+
       - name: Run backend contract tests
         run: node backend.test.js
 
+      - name: Run operations and worker tests
+        run: node operations.test.js
+
+      - name: Run end-to-end backend test
+        run: node e2e.test.js
+
+      - name: Run large-dataset pagination test
+        run: node large-dataset.test.js
+
+      - name: Run PostgreSQL persistence test
+        run: node postgres.test.js
+
       - name: Run adversarial tests
         run: node adversarial.test.js
+
+      - name: Run labeled evaluation harness
+        run: node evaluation.test.js
+
+      - name: Check resource budget
+        run: node tools/resource-analysis.js
 
       - name: Run doctor diagnostics
         run: node doctor.js
@@ -87,3 +124,60 @@ jobs:
           });
           console.log('No overclaiming found.');
           "
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --tag summarize-this:test .
+
+  windows-installer:
+    name: Windows 11 installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Build standalone backend
+        run: npm run build:windows-backend
+
+      - name: Test standalone backend
+        shell: powershell
+        run: .\tools\test-packaged-backend.ps1
+
+      - name: Build installer
+        shell: powershell
+        run: .\installer\windows\build-installer.ps1 -PayloadInspectionPath ".tmp\installer-payload"
+
+      - name: Verify installer payload
+        shell: powershell
+        run: |
+          $runtimeFiles = Get-Content runtime-files.json -Raw | ConvertFrom-Json
+          foreach ($file in @($runtimeFiles) + @("Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")) {
+            if (-not (Test-Path -LiteralPath (Join-Path ".tmp\installer-payload" $file) -PathType Leaf)) {
+              throw "Installer payload is missing $file"
+            }
+          }
+
+      - name: Test install, backend startup, and uninstall
+        shell: powershell
+        run: .\tools\test-windows-install.ps1
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SummarizeThisSetup
+          path: dist/windows-installer/SummarizeThisSetup.exe

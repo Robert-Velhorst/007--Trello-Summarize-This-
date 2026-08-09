@@ -1,26 +1,18 @@
-# Blocked Phases Register
+# External Gates Register
 
-Date: 2026-07-23
+Date: 2026-08-08
 
-## Strictly Blocked Phases (Truthful Audit Assessment)
+The repository-only deliverables for phases 000-115 now have local implementations or evidence. That does not make every live-service outcome complete. The following gates require owner credentials, third-party approval, representative private data, or a live environment and cannot be truthfully manufactured in source code.
 
-Per the **No False Completion Rule** in the prompt:
-> *"If a phase cannot be completed from repo-only work without external accounts, credentials, or a live environment — mark it Blocked, document exactly what is required, and stop."*
-
-The following 13 phases are formally classified as **Blocked** because they require external services, live multi-user backend infrastructure, or third-party accounts that cannot be provisioned from local repository code alone:
-
-| Phase | Title | Exact External Requirement / Blocker |
+| Gate | Current repository state | Required external action |
 |---|---|---|
-| 016 | Background jobs, schedulers, and workers | Requires external persistent job runner / worker queue infrastructure (e.g. Redis + Bull, Celery, or AWS SQS). |
-| 022 | Search, filters, sorting, and pagination | Requires backend database indexing and multi-card search API endpoints beyond local Trello card scope. |
-| 027 | Notifications and reminders | Requires external email provider (SendGrid/Mailgun) or WebPush service integration. |
-| 032 | Docker and deployment readiness | Requires live production container orchestration (Kubernetes, AWS ECS) and registry credentials. |
-| 033 | Database migrations and rollback safety | Requires live production SQL database instance (PostgreSQL) and migration runner execution. |
-| 042 | Worker/job test suite | Requires active background worker queue infrastructure to run test suites against. |
-| 052 | Large dataset and pagination testing | Requires persistent database prepopulated with thousands of multi-user card records. |
-| 053 | Backup and restore procedures | Requires cloud storage bucket (AWS S3) and DB snapshot automation in a live environment. |
-| 054 | Incident response and recovery playbook | Requires live production ops environment, PagerDuty integration, and SLA monitoring. |
-| 055 | Product analytics local-first design | Requires production telemetry backend ingestion service. |
-| 056 | SaaS readiness without forced billing | Requires live Stripe account integration, production database, and multi-tenant billing infrastructure. |
-| 106 | Role-based settings and team permissions | Requires production identity provider (IdP) and multi-tenant RBAC database backend. |
-| 109 | Exception-based workflow dashboard | Requires persistent cross-board aggregation database and event processing queue. |
+| Public HTTPS Power-Up hosting | Static runtime and setup assistant implemented | Deploy the selected commit to an owner-controlled HTTPS host and save its connector URL in Trello |
+| Trello marketplace/listing | Connector and capability configuration implemented | Submit and obtain Trello approval if public distribution is desired |
+| Live Trello writeback acceptance | Description/comment writes are approval-gated, freshness-checked, and ambiguity-safe | Run the documented test on an expendable card using the deployed build |
+| Provider activation | Direct and optional proxy paths exist; local fallback is functional | Supply user-owned provider credentials and accept provider terms/costs |
+| Measured accuracy claim | Labeled evaluation harness exists; checked-in data is synthetic | Provide a representative, independently labeled, held-out dataset and review disagreements |
+| Production multi-instance service | Single-instance JSON backend, integrated worker, migrations, local backup, Docker image, and runtime lock exist | Provision a production database, managed secret store, TLS ingress, monitoring, and multi-instance job queue before scaling beyond one instance |
+| Offsite disaster recovery | Verified local backup/restore exists | Configure encrypted offsite retention and perform a restore drill in the chosen production environment |
+| Payments | Billing is disabled; local summaries are free; purchase/webhook/refund paths fail closed | Choose a payment provider and implement verified signatures, reconciliation, dispute/refund handling, and legal review before enabling billing |
+
+No external gate is represented as completed. Local functionality remains usable without payments, production hosting, or a provider key through the deterministic reviewed workflow.

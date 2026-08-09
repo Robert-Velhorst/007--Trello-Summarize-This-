@@ -1,6 +1,6 @@
 # Acceptance Tests
 
-Date: 2026-07-23 (Phase 115 update)
+Date: 2026-08-08
 Previous: 2026-07-12
 
 ## Automated Acceptance Tests
@@ -35,11 +35,21 @@ Previous: 2026-07-12
 |---|---|---|---|
 | Backend contract tests | All backend API assertions pass | Passed | PASS |
 
+### Operations And End-To-End Suites
+
+| Suite | Coverage | Status |
+|---|---|---|
+| `node operations.test.js` | Schema migration, worker success/retry/failure, reminders, backup/restore, repair, redaction, runtime lock | PASS |
+| `node e2e.test.js` | Real HTTP auth, roles, shared summaries, free local mode, reviewed worker, backup, support bundle | PASS |
+| `node large-dataset.test.js` | Search, sort, and pagination across 5,000 users | PASS |
+| `node adversarial.test.js` | Cross-user isolation, path/URL and provider failure safety | PASS |
+| `node evaluation.test.js` | Synthetic labeled-harness contract, not measured accuracy proof | PASS |
+
 ### Doctor: `node doctor.js`
 
 | Check | Status |
 |---|---|
-| All 13 required files exist | PASS |
+| All 21 required runtime/operations files exist | PASS |
 | Shared Trello config defined | PASS |
 | Connector/popup/authorize load config | PASS |
 | Manifest points to connector.html | PASS |

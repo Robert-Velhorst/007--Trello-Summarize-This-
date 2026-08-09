@@ -46,7 +46,7 @@ Backend starts at http://127.0.0.1:8787/
 ## Diagnostics
 
 ```bash
-npm run doctor           # Verify all files, modules, and config (30 checks)
+npm run doctor           # Verify required files, modules, operations, and config
 npm run doctor:backend   # Verify backend env vars
 npm run flags            # List all feature flags and their effective values
 ```

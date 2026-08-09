@@ -1,10 +1,10 @@
 {
   "schemaVersion": "summarize-this-update-manifest-v1",
-  "version": "1.0.4",
-  "releaseDate": "2026-07-19",
+  "version": "1.1.0",
+  "releaseDate": "2026-08-09",
   "minimumSupportedVersion": "1.0.0",
-  "releaseNotesUrl": "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/releases",
-  "downloadUrl": "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/dist/windows-installer/SummarizeThisSetup.exe",
-  "manifestUrl": "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json",
+  "releaseNotesUrl": "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/releases",
+  "downloadUrl": "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/dist/windows-installer/SummarizeThisSetup.exe",
+  "manifestUrl": "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json",
   "message": "Manual update checks are user-triggered. Downloads and installation always require the user's action."
 }

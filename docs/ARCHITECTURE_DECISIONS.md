@@ -30,15 +30,15 @@ Date: 2026-07-23 (Phase 004)
 
 **Context:** A subset of features (admin panel, credit tracking, user management) require server-side state.
 
-**Decision:** Provide a lightweight Node.js backend (`backend-app.js`) with an in-memory store. The backend is optional and not required for the core Power-Up.
+**Decision:** Provide a lightweight Node.js backend (`backend-app.js`) with a local JSON runtime store. The backend is optional and not required for the core Power-Up.
 
 **Rationale:**
 - Allows local development and testing of admin features without database provisioning.
 - Clearly separates shipped Power-Up scope from backend scope.
-- In-memory store makes the backend stateless-on-restart and easy to reason about.
+- A local JSON store keeps development setup simple without requiring database provisioning.
 
 **Consequences:**
-- Backend is not production-safe without: persistent DB, password hashing, TLS, rate limiting.
+- Backend is not production-safe without: persistent DB hardening/migrations, TLS, stronger admin credential handling, and production-grade rate limiting/operations.
 - All production blockers are documented in `docs/ROADMAP_AND_BLOCKED_ITEMS.md`.
 
 ---
@@ -75,6 +75,6 @@ Date: 2026-07-23 (Phase 004)
 
 **Context:** The product can generate Trello comment drafts. Auto-posting without review is a safety risk.
 
-**Decision:** All Trello writes (comment post, future description writeback) require explicit human approval in the popup UI before execution.
+**Decision:** All Trello writes (comment post and description replacement) require explicit human approval in the popup UI before execution.
 
 **Rationale:** Aligns with the "human operator in the loop" requirement from the product brief.

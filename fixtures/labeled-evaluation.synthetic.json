@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "summarize-this-labeled-evaluation-v1",
+  "fixtureOnly": true,
+  "cases": [
+    {
+      "id": "synthetic-required-and-review",
+      "expected": {
+        "requiredPhrases": ["deploy", "owner: ana"],
+        "forbiddenPhrases": ["production completed"],
+        "reviewRequired": true
+      },
+      "output": {
+        "about": "Deploy is waiting for approval.",
+        "nextActions": ["Owner: Ana to confirm deployment window."],
+        "reviewRequired": true
+      }
+    },
+    {
+      "id": "synthetic-review-disagreement",
+      "expected": {
+        "requiredPhrases": ["approval"],
+        "forbiddenPhrases": ["no blockers"],
+        "reviewRequired": true
+      },
+      "output": {
+        "currentStatus": "Approval remains pending.",
+        "reviewRequired": false
+      }
+    }
+  ]
+}

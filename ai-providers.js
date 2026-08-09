@@ -137,6 +137,10 @@ Return only valid JSON with this schema:
   "missingInfo": ["missing data needed before acting"],
   "unresolvedQuestions": ["question that should be answered"],
   "insights": ["important operational insight"],
+  "facts": ["claim directly stated in supplied card data"],
+  "inferences": ["interpretation that requires human review"],
+  "uncertainty": ["information that could not be verified"],
+  "unsupportedClaims": ["claim that must not be treated as fact"],
   "evidenceClaims": [{"claim":"factual claim","source":"title|description|comment|activity|checklist|label|member|due|attachment|custom-field","confidence":"supported|uncertain"}],
   "validationFindings": ["unsupported, conflicting, incomplete, or attachment-extraction issue"],
   "confidenceReason": "brief explanation based on data completeness and evidence coverage"
@@ -264,7 +268,7 @@ ${attachments.length ? attachments.join('\n') : 'No attachment metadata loaded.'
                         { role: 'user', content: userPrompt }
                     ],
                     temperature: 0.7,
-                    max_tokens: this.maxOutputTokens,
+                    max_completion_tokens: this.maxOutputTokens,
                     response_format: { type: 'json_object' }
                 })
             });

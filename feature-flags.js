@@ -92,7 +92,7 @@ function readOverride(key) {
     if (v === "false" || v === "0" || v === "no") return false;
   }
   // Browser
-  if (typeof localStorage !== "undefined") {
+  if (typeof localStorage !== "undefined" && typeof localStorage.getItem === "function") {
     const v = localStorage.getItem("summarize_this_flag_" + key);
     if (v === "true") return true;
     if (v === "false") return false;

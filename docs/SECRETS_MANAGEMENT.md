@@ -42,6 +42,6 @@ On any suspected credential compromise:
 
 | Gap | Required Action |
 |---|---|
-| Backend passwords in plaintext | Add bcrypt/argon2 hashing |
+| Backend user passwords are hashed, but admin secrets still live in environment configuration | Harden admin auth secret handling, rotation, and deployment boundaries |
 | No secret scanning in CI | Add `gitleaks` or `trufflesecurity` scan to CI |
 | No credential rotation schedule | Establish quarterly rotation policy |

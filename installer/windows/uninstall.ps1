@@ -3,6 +3,24 @@ $ErrorActionPreference = "Stop"
 $InstallRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $StartMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Summarize This"
 $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SummarizeThis"
+$BackendPidPath = Join-Path $InstallRoot "backend.pid"
+$BackendExecutable = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot "SummarizeThisBackend.exe"))
+
+if (Test-Path -LiteralPath $BackendPidPath -PathType Leaf) {
+  $backendPid = 0
+  if ([int]::TryParse((Get-Content -LiteralPath $BackendPidPath -Raw).Trim(), [ref]$backendPid)) {
+    $backendProcess = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
+    if ($backendProcess) {
+      try {
+        if ([System.IO.Path]::GetFullPath($backendProcess.Path) -eq $BackendExecutable) {
+          Stop-Process -Id $backendPid -Force
+          $backendProcess.WaitForExit()
+        }
+      } catch {
+      }
+    }
+  }
+}
 
 if (Test-Path -LiteralPath $StartMenuDir) {
   Remove-Item -LiteralPath $StartMenuDir -Recurse -Force

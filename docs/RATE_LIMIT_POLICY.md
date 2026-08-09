@@ -45,8 +45,11 @@ budget.warningPercent = 75                     (warn at 75% of limit)
 
 ## Backend Rate Limiting
 
-The backend API has no rate limiting in the current implementation. This must be added before any public-facing deployment:
+The local file-backed backend enforces these persistent attempt limits before credential verification:
 
-- Add per-IP rate limiting middleware
-- Add per-user request throttling on `/api/summarize`
-- Add admin login brute-force protection
+- Registration: 5 attempts per email per hour and 20 attempts per socket client address per hour
+- User login: 10 attempts per email per minute and 30 attempts per socket client address per minute
+- Admin login: 5 attempts per email per 15 minutes and 10 attempts per socket client address per 15 minutes
+- Deterministic summary requests: 20 requests per user per minute
+
+The client-address limit uses the direct socket address only and does not trust forwarding headers supplied by a browser. These controls are local protections, not a substitute for production proxy-aware/distributed limits. A public deployment still needs reverse-proxy and distributed rate limiting.

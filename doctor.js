@@ -28,7 +28,15 @@ function addCheck(label, ok, detail) {
   "backend-config.js",
   "backend-app.js",
   "backend-server.js",
+  "backend-storage.js",
+  "backend-migrations.js",
+  "backend-worker.js",
+  "backend-lock.js",
+  "backend-support.js",
+  "backend-cli.js",
   "backend-doctor.js",
+  "Dockerfile",
+  "docker-compose.yml",
   "database/connection.js",
   "middleware/errorHandler.js"
 ].forEach((fileName) => {
@@ -84,8 +92,11 @@ const packageText = exists("package.json") ? read("package.json") : "{}";
 addCheck(
   "Package exposes backend scripts",
   /"start:backend"\s*:\s*"node backend-server\.js"/.test(packageText) &&
-    /"doctor:backend"\s*:\s*"node backend-doctor\.js"/.test(packageText),
-  "package.json should expose backend startup and backend doctor scripts"
+    /"doctor:backend"\s*:\s*"node backend-doctor\.js"/.test(packageText) &&
+    /"test:operations"/.test(packageText) &&
+    /"test:e2e"/.test(packageText) &&
+    /"build:windows-installer"/.test(packageText),
+  "package.json should expose backend, operations, E2E, and installer scripts"
 );
 
 const backendServerText = exists("backend-server.js") ? read("backend-server.js") : "";
@@ -100,6 +111,13 @@ addCheck(
   "Backend health and readiness endpoints exist",
   /\/api\/health/.test(backendAppText) && /\/api\/readiness/.test(backendAppText),
   "backend-app.js should expose /api/health and /api/readiness"
+);
+addCheck(
+  "Backend operations endpoints exist",
+  /\/api\/admin\/backup\/create/.test(backendAppText) &&
+    /\/api\/admin\/data\/reconcile/.test(backendAppText) &&
+    /\/api\/admin\/support-bundle/.test(backendAppText),
+  "backend-app.js should expose backup, reconciliation, and support operations"
 );
 
 // Node.js version check
@@ -147,4 +165,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Doctor checks passed.");
+console.log(`Doctor checks passed (${checks.length} checks).`);

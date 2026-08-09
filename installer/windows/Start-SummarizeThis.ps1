@@ -1,6 +1,7 @@
 param(
   [switch]$NoLaunch,
   [switch]$Setup,
+  [switch]$BackendOnly,
   [int]$Port = 17117
 )
 
@@ -18,6 +19,50 @@ if (Test-Path -LiteralPath (Join-Path $ScriptRoot "popup.html") -PathType Leaf) 
 }
 $DefaultPort = $Port
 $HostAddress = [System.Net.IPAddress]::Parse("127.0.0.1")
+$BackendPort = 18787
+$BackendExecutable = Join-Path $AppRoot "SummarizeThisBackend.exe"
+$BackendConfigPath = Join-Path $AppRoot "backend-settings.psd1"
+$BackendPidPath = Join-Path $AppRoot "backend.pid"
+
+function Test-SummarizeThisBackend {
+  try {
+    $health = Invoke-RestMethod -TimeoutSec 1 "http://127.0.0.1:$BackendPort/api/health"
+    return $health.status -eq "ok" -and $health.service -eq "summarize-this-backend"
+  } catch {
+    return $false
+  }
+}
+
+function Start-SummarizeThisBackend {
+  if (Test-SummarizeThisBackend) { return }
+  if (-not (Test-Path -LiteralPath $BackendExecutable -PathType Leaf) -or -not (Test-Path -LiteralPath $BackendConfigPath -PathType Leaf)) {
+    if ($BackendOnly) { throw "The installed backend runtime or private settings file is missing." }
+    Write-Warning "The standalone backend is unavailable; the local summarizer can still run without persistence."
+    return
+  }
+
+  $settings = Import-PowerShellDataFile -LiteralPath $BackendConfigPath
+  $previous = @{}
+  try {
+    foreach ($entry in $settings.GetEnumerator()) {
+      $previous[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, "Process")
+      [Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, "Process")
+    }
+    $backendProcess = Start-Process -FilePath $BackendExecutable -WorkingDirectory $AppRoot -WindowStyle Hidden -PassThru
+    Set-Content -LiteralPath $BackendPidPath -Value ([string]$backendProcess.Id) -Encoding ASCII
+  } finally {
+    foreach ($entry in $settings.GetEnumerator()) {
+      [Environment]::SetEnvironmentVariable($entry.Key, $previous[$entry.Key], "Process")
+    }
+  }
+
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    Start-Sleep -Milliseconds 250
+    if (Test-SummarizeThisBackend) { return }
+    if ($backendProcess.HasExited) { break }
+  }
+  throw "The standalone backend did not become healthy."
+}
 
 function Test-SummarizeThisServer {
   param([int]$Port)
@@ -119,6 +164,9 @@ function Resolve-RequestPath {
 
   return $fullPath
 }
+
+Start-SummarizeThisBackend
+if ($BackendOnly) { return }
 
 $portInfo = Get-AvailablePort
 $port = [int]$portInfo.Port

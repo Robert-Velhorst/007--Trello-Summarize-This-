@@ -17,7 +17,7 @@ File: `.github/workflows/ci.yml`
 2. `node test.js` — core logic and popup contract tests
 3. `node backend.test.js` — backend API contract tests
 4. `node adversarial.test.js` — adversarial, isolation, path traversal tests
-5. `node doctor.js` — self-diagnostics (30 checks)
+5. `node doctor.js` — self-diagnostics (current required-file and operations checks)
 
 **Job 2: lint-docs**
 1. Verify all 14 required documentation files exist

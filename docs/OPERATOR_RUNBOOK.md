@@ -1,12 +1,23 @@
 # Operator Runbook
 
-Date: 2026-07-23 (Phase 115)
+Date: 2026-08-09
 
 ## How to Run Locally
 
+### Windows 11 Installed App
+
+Run `SummarizeThisSetup.exe`, then use the Start menu shortcuts:
+
+- **Summarize This** starts the bundled backend and local UI.
+- **Configure Trello Power-Up** opens the setup assistant.
+- **Share Backend with ngrok** starts an explicit HTTPS tunnel after checking the backend. ngrok must already be installed and authorized.
+- **Uninstall Summarize This** stops the exact installed backend process and removes the per-user installation.
+
+The installed backend listens at `http://127.0.0.1:18787/api`; its generated secrets and local store stay under the current user's LocalAppData installation folder.
+
 ### Prerequisites
 
-- Node.js >= 18 (verified: v20.20.2)
+- Node.js 20 or 22 for repository development and CI
 - No other dependencies required for the static Power-Up
 
 ### Start the Static Power-Up Server
@@ -25,6 +36,7 @@ The backend requires environment variables. It will refuse to start without them
 ```bash
 export JWT_SECRET="your-secret-here"
 export ADMIN_PASSWORD="your-admin-password-here"
+export RUN_WORKER="true"
 # Optional:
 export TRELLO_APP_KEY="your-trello-app-key"
 export OPENAI_API_KEY="sk-..."
@@ -39,24 +51,42 @@ npm run start:backend
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Token signing secret (min 32 chars recommended) |
-| `ADMIN_PASSWORD` | Yes | Admin panel password |
+| `JWT_SECRET` | Yes | Secret used to key opaque session-token hashes (minimum 32 characters; retained name for compatibility) |
+| `ADMIN_PASSWORD` | Yes | Local admin panel password (minimum 12 characters) |
 | `TRELLO_APP_KEY` | Recommended | Trello Power-Up app key for comment/auth routes |
-| `OPENAI_API_KEY` | Optional | Direct OpenAI provider key |
-| `ANTHROPIC_API_KEY` | Optional | Direct Anthropic provider key |
-| `GOOGLE_API_KEY` | Optional | Direct Google AI provider key |
-| `PROXY_ENDPOINT` | Optional | HTTPS proxy endpoint for AI calls |
-| `DATABASE_URL` | Optional | Persistent DB (not active; backend uses in-memory store) |
-| `STRIPE_SECRET_KEY` | Optional | Stripe integration |
-| `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook verification |
+| `OPENAI_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `ANTHROPIC_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `GOOGLE_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
+| `PROXY_ENDPOINT` | Optional | Used by the browser Power-Up proxy flow; the local backend does not proxy requests |
+| `BACKEND_ALLOWED_ORIGINS` | Required for hosted backend use | Comma-separated hosted Power-Up origins allowed to make browser API requests; local defaults are `http://127.0.0.1:17117,http://localhost:17117` |
+| `RUN_WORKER` | Recommended | `true` runs reminders and approved local batch jobs inside the single backend process |
+| `WORKER_INTERVAL_MS` | Optional | Worker interval, minimum 1000 ms; default 5000 ms |
+| `BACKEND_STORE_PATH` | Optional | Absolute or working-directory-relative JSON store path; backend, worker, and CLI must use the same value |
+| `BACKEND_STORE` | Optional | `local` or `postgres`; a configured `DATABASE_URL` selects PostgreSQL when no explicit local file path is supplied |
+| `DATABASE_URL` | Required for PostgreSQL | PostgreSQL connection URL; keep credentials in managed environment secrets |
+| `DB_POOL_MAX` | Optional | PostgreSQL pool size, bounded to 1-20; default 4 |
+| `DATABASE_SSL` | Optional | `true` enables PostgreSQL TLS; certificate verification is on unless explicitly disabled |
+| `HAI_CONNECTOR_ENABLED` | Optional | `true` enables per-user read-only HAI feeds; default false on server deployments |
+| `STRIPE_SECRET_KEY` | Not active | Reserved for a future verified Stripe integration; purchases remain disabled |
+| `STRIPE_WEBHOOK_SECRET` | Not active | Reserved for a future verified Stripe integration; webhooks remain disabled |
 
 ## How to Run Migrations
 
-No migrations are required for the current in-memory backend. If a persistent database is provisioned in future, database migration tooling must be added at that time.
+Schema migrations run automatically and fail closed on unsupported future versions. The local store uses a file lock; PostgreSQL uses an advisory writer lock. Offline commands require the active backend writer to be stopped.
+
+```bash
+npm run backend:status
+npm run backend:migrate
+npm run backend:backup
+npm run backend:reconcile
+node backend-cli.js reconcile --apply
+```
+
+See `BACKUP_RESTORE.md` and `DATA_RECONCILIATION.md`.
 
 ## How to Run Workers/Schedulers
 
-No background workers or schedulers exist in the current shipped scope.
+Set `RUN_WORKER=true` on the backend. This is the supported continuous mode. `npm run worker:once` is an offline one-cycle command and refuses to start while the backend owns the store. See `WORKER_OPERATIONS.md`.
 
 ## How to Run Tests
 
@@ -72,12 +102,17 @@ Individual test suites:
 ```bash
 node test.js          # Core logic, popup contract, installer, summarizer
 node backend.test.js  # Backend API contract tests
+node operations.test.js # Migrations, worker, backup, repair, redaction, locking
+node e2e.test.js       # Real HTTP critical path
+node large-dataset.test.js # 5,000-user search/pagination
+node postgres.test.js   # PostgreSQL persistence/restart/writer exclusion when TEST_DATABASE_URL is set
+node evaluation.test.js # Labeled evaluation harness
 ```
 
 ## How to Run Diagnostics
 
 ```bash
-npm run doctor           # Full static Power-Up diagnostics (30 checks)
+npm run doctor           # Full Power-Up and operations diagnostics
 npm run doctor:backend   # Backend environment and config diagnostics
 ```
 
@@ -108,11 +143,8 @@ node test.js
 
 ## How to Deploy (Static Power-Up)
 
-1. Host all `.html`, `.js`, `.css`, `.svg`, `.json` files at a public HTTPS URL
-2. Configure `trello-config.js` with your Trello app key:
-   ```js
-   window.SummarizeThisTrelloConfig = { appKey: "your-trello-app-key" };
-   ```
+1. Run `npm run build:static`; deploy only the generated `dist/static-site` artifact.
+2. Keep `runtime-files.json` as the source allowlist and configure the public Trello app key in `trello-config.js`.
 3. Register the Power-Up at https://trello.com/power-ups/admin with:
    - Connector URL: `https://your-host/connector.html`
    - Capabilities: card-buttons, card-detail-badges, show-settings, authorization-status, show-authorization
@@ -128,22 +160,33 @@ npx wrangler deploy
 
 See `proxy/README.md` for full instructions.
 
+## Docker Backend
+
+```bash
+cp .env.example .env
+# Replace JWT_SECRET, ADMIN_PASSWORD, and POSTGRES_PASSWORD.
+docker compose up --build -d
+docker compose ps
+```
+
+Compose binds the backend to `127.0.0.1:8787`, runs PostgreSQL 17 without a host port, uses a bounded backend pool, runs as a non-root user with dropped capabilities, stores state in named volumes, and runs the worker inside the backend process. Add owner-controlled TLS ingress before exposing it beyond the local machine.
+
 ## Security Warnings
 
 - Do not commit `.dev.vars`, `JWT_SECRET`, or any provider keys.
-- Backend stores passwords in plaintext in memory — not production-safe. Add password hashing before any external deployment.
+- Backend stores async-scrypt password hashes in a local JSON runtime store and excludes hash material from user exports. Admin login still depends on environment credentials; use a managed secret store and production identity control before internet exposure.
 - The `proxy/.dev.vars` file is excluded by `.gitignore`.
 - AI summaries must not be presented as verified facts without human review.
 
 ## Known Limitations
 
-1. Backend uses in-memory store — data is lost on restart.
-2. Passwords are stored in plaintext — not production-safe.
-3. No real database integration.
-4. Binary attachment content (PDF, Word, images) is metadata-only.
-5. Batch execution is manual-first — no automated unattended batch.
-6. Trello description writeback is not implemented.
-7. Measured accuracy proof is not available — confidence is a heuristic signal.
+1. Desktop uses a local JSON store; server deployments support PostgreSQL but deliberately allow one active writer.
+2. User passwords use asynchronous scrypt, but admin authentication still relies on environment credentials.
+3. Local file and PostgreSQL advisory locks deliberately limit the release to one writer; scale-out requires normalized transactional tables and distributed coordination.
+4. Binary attachment extraction depends on browser library availability and otherwise falls back honestly to metadata.
+5. Local worker execution requires explicit source text and approval, stops at review-required, and never fetches or writes Trello.
+6. Trello description replacement is wired with explicit approval and source-freshness checks, but requires live Trello verification before production use.
+7. Measured accuracy proof is not available; confidence is a heuristic signal.
 
 ## Blocked Items and External Requirements
 
@@ -152,5 +195,6 @@ See `proxy/README.md` for full instructions.
 | Trello Power-Up listing | Requires Trello developer account approval |
 | AI provider calls | Requires API key from OpenAI, Anthropic, or Google |
 | Stripe payments | Requires Stripe account and key |
-| Persistent backend | Requires database provisioning |
+| Multi-instance production backend | Requires production database, job queue, TLS, managed secrets, and monitoring |
+| Offsite disaster recovery | Requires encrypted remote storage and a live restore drill |
 | Proxy deployment | Requires Cloudflare account |

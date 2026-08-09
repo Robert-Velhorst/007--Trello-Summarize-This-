@@ -47,8 +47,8 @@ The `update.json` file at the repo root is the source of truth for the current v
 {
   "schemaVersion": "summarize-this-update-manifest-v1",
   "version": "X.Y.Z",
-  "manifestUrl": "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json",
-  "releaseNotesUrl": "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/releases/tag/vX.Y.Z"
+  "manifestUrl": "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json",
+  "releaseNotesUrl": "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/releases/tag/vX.Y.Z"
 }
 ```
 

@@ -68,6 +68,6 @@ Feedback records remain compact. Correction text is capped, and `incorrectSectio
 - JSON export uses the compact ledger run and card snapshot. It does not include full card descriptions, but evidence excerpts may still contain card context selected by the analysis.
 - Human-readable exports now include bounded evidence-backed claims and source coverage, so copied markdown/plain text/status briefs and Trello comment drafts remain traceable outside the popup.
 - Trello comment writeback is capability-dependent. If the Trello Power-Up runtime does not expose a supported comment API, the popup remains copy-only.
-- Trello description writeback is not implemented.
+- Trello description replacement uses a reviewed editable draft, explicit approval and confirmation, a source-freshness check, and private pending/ambiguous/update attempt tracking. Live Trello verification is still required before production use.
 - The ledger still keeps deterministic extraction as a fallback when an AI provider omits structured operational fields.
 - Unclear-point detection is intentionally conservative. It catches explicit contradictions, validation conflicts, and deterministic status conflicts such as a due date marked complete while checklist items remain open, but deeper semantic contradiction detection still depends on the configured AI provider.

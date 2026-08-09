@@ -8,7 +8,7 @@
 }(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  var CONNECTOR_BUILD_ID = "20260719.3";
+  var CONNECTOR_BUILD_ID = "20260809.1";
 
   var DEFAULT_MANIFEST = {
     name: "Summarize This",
@@ -86,8 +86,11 @@
       actionLabel: preset.actionLabel || "",
       actionUrl: preset.actionUrl || "",
       requiredFiles: [
+        "runtime-files.json",
         "connector.html",
+        "trello-config.js",
         "connector.js",
+        "authorize.html",
         "popup.html",
         "settings-powerup.html",
         "privacy.html",
@@ -103,16 +106,16 @@
         "Open " + buildHostedUrl(targetBaseUrl, "privacy.html") + " and " + buildHostedUrl(targetBaseUrl, "terms.html") + " and confirm both policy pages load.",
         "Copy the iframe Connector URL into Trello Power-Up admin only after the HTTPS URLs load publicly."
       ],
-      resourceNote: "Deployment is static hosting only. No server, polling job, database, API key, or background worker is required."
+      resourceNote: "The core Power-Up is static and works without a server. Authenticated persistence, reviewed batch state, and HAI feeds require the optional backend."
     };
 
     if (id === "github-pages") {
       guide.steps = [
-        "Commit and push the Power-Up files to the GitHub repository.",
-        "Open repository Settings, then Pages.",
-        "Set Source to Deploy from a branch.",
-        "Select the branch and folder that contain the required static files.",
-        "Wait for GitHub Pages to publish the HTTPS site, then use that public URL here."
+        "Commit and push the Power-Up files and runtime-files.json to the GitHub repository.",
+        "Open repository Settings, then Pages, and use GitHub Actions as the source.",
+        "Run or wait for the Deploy Power-Up to GitHub Pages workflow.",
+        "Verify deployment.json and every required URL before changing Trello admin.",
+        "Use the published HTTPS connector.html URL in Trello Power-Up admin."
       ];
     } else if (id === "netlify") {
       guide.steps = [

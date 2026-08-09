@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.env
+.npm-cache
+.tmp
+database/runtime
+dist
+docs
+installer
+*.pdf
+*.md
+*.test.js

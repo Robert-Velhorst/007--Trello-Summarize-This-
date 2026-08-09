@@ -15,7 +15,7 @@ All analysis runs, exports, and feedback events are recorded in the user's membe
 
 This history is visible to the user in the popup's ledger history panel and is used to build the `priorFeedback` context for the next AI prompt.
 
-## Backend Audit Log (In-Memory)
+## Backend Audit Log (Local JSON Runtime Store)
 
 `backend-app.js` maintains a `store.events` array. Events are appended on:
 - User registration / login
@@ -25,7 +25,7 @@ This history is visible to the user in the popup's ledger history panel and is u
 
 Events are accessible at `GET /api/admin/audit` (admin token required).
 
-**Limitation:** The event log is in-memory only. It is lost on server restart. A persistent DB is required for production audit logging.
+**Limitation:** The event log is retained in the local JSON runtime store but has no production retention, integrity, access-control, or multi-instance guarantees. A production database and audit-log controls are required for production audit logging.
 
 ## What Is NOT Logged
 
@@ -38,4 +38,4 @@ Events are accessible at `GET /api/admin/audit` (admin token required).
 
 Client-side ledger: retained in Trello member-private storage until the user clears it or removes the Power-Up. No server-side copy.
 
-Backend events: retained in memory for the lifetime of the server process. See `docs/DATA_RETENTION_AND_ARCHIVAL_POLICY.md` for the policy.
+Backend events: retained in the local JSON runtime store until the local store is removed or replaced. See `docs/DATA_RETENTION_AND_ARCHIVAL_POLICY.md` for the policy.

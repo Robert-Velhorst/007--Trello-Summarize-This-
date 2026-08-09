@@ -1,111 +1,58 @@
 # Final Verification Report
 
-Date: 2026-07-23 (Phase 115)
-Previous: 2026-07-12
+Date: 2026-08-09
 
-## What Was Verified
+## Outcome
 
-### Automated Verification (2026-07-23)
+The repository implements the giant prompt for the supported single-instance product scope. The release includes the static Trello Power-Up, authenticated backend, local and PostgreSQL persistence, reviewed worker workflows, a review-gated HAI feed, Docker deployment, and a standalone Windows 11 installer.
 
-All commands run from the repository root on Node.js v20.20.2:
+This is not a claim of Trello marketplace approval, measured summary correctness, verified paid-provider credentials, a live HAI source, or horizontal multi-writer scaling. Those remain external acceptance or future-product gates.
 
-```bash
-node test.js
-# Result: All summarizer tests passed.
+## Automated Evidence
 
-node backend.test.js
-# Result: Backend contract tests passed.
+| Check | Result |
+|---|---|
+| `npm.cmd run test:all` with PostgreSQL 17 | PASS: core, static package, backend, worker/operations, HTTP E2E, 5,000-user pagination, PostgreSQL persistence/restart/writer exclusion, adversarial, labeled evaluation |
+| `npm.cmd audit --omit=dev` and `npm.cmd audit` | PASS: 0 vulnerabilities |
+| `node doctor.js` | PASS: 39 checks |
+| `node backend-doctor.js` with required environment | PASS |
+| `node tools/resource-analysis.js` | PASS: 444.4 KB initial popup, 40.2 KB deferred attachments, 621.9 KB static runtime, 2.95 MB repository source |
+| `docker build --tag summarize-this:local-qa .` | PASS: Node 22 Alpine, production dependencies, 0 vulnerabilities |
+| `tools/test-packaged-backend.ps1` | PASS: bundled executable healthy, version 1.1.0, local store created |
+| `tools/test-windows-install.ps1` | PASS: install, private ACL, backend startup, local persistence, uninstall |
+| Browser and Playwright QA | PASS: desktop/mobile render, no horizontal overflow, 0 errors/warnings, health check, account creation, HAI URL rotation/revocation, explicit save approval |
+| `ngrok version` and `ngrok config check` | PASS: 3.39.8 and valid user configuration; no public tunnel was opened during verification |
 
-node doctor.js
-# Result: Doctor checks passed. (30 checks, all OK)
+## Resource Findings
 
-node -e "require('./summarizer-core'); require('./card-intelligence-ledger'); require('./attachment-processor'); require('./ai-providers'); require('./trello-integration'); console.log('core-modules-ok')"
-# Result: core-modules-ok
-```
+- Attachment parsing moved from every popup load to an on-demand 40.2 KB load.
+- The desktop default is one bundled backend process with a private JSON store; PostgreSQL and Docker are not required on Windows.
+- PostgreSQL uses a bounded pool of four connections by default and a single-writer advisory lock.
+- Static deployment is generated from a 24-file allowlist; backend source, environment files, caches, and build directories cannot enter Pages output.
+- The standalone backend executable is 57,928,372 bytes before installer compression.
+- The final Windows installer is 22,032,384 bytes (21.01 MiB), SHA-256 `F54690B345600264391986E91205E4545BE9B901025F61E7B7DF4CCD49779FED`.
 
-### Code Changes Verified (Phase 115)
+## Security Findings Fixed
 
-- `test.js` line 96: Fixed regex mismatch for `local-dev-server.js` template literal.
-- `connector.js`: Added error boundaries around card-buttons and card-detail-badges callbacks.
-- `local-dev-server.js`: Added CORS headers, security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy), OPTIONS preflight handling, and graceful SIGINT/SIGTERM shutdown.
-- `backend-app.js`: Added security headers and CORS preflight to all API responses.
-- `doctor.js`: Added Node.js version check, core module loading check, and docs directory check.
+- Removed browser debug logging that exposed provider keys and backend tokens.
+- Separated provider keys, backend sessions, and ordinary settings into member-private records.
+- Added transient-password account registration/sign-in instead of requiring manual session-token handling.
+- Added PostgreSQL TLS verification controls, bounded connections, durable health checks, optimistic revision protection, and writer exclusion.
+- Added per-user HAI capability URLs with HMAC-only storage, immediate rotation/revocation, explicit summary approval, strict Trello source links, stable cursors, and owner isolation.
+- Added generated Windows secrets protected by a current-user-only ACL.
+- Preserved fail-closed payment, webhook, provider-backend, service-control, and unapproved external-action behavior.
+- Kept local HTTP limited to loopback; public Trello/HAI access requires the explicit ngrok shortcut and HTTPS URL.
 
-### Repository Integrity Verified
+## External Acceptance Gates
 
-- No secrets committed. `.gitignore` covers `.npm-cache/`, `.tmp/`, and `proxy/.dev.vars`.
-- No hardcoded credentials in source files.
-- Error messages are sanitized in ai-providers.js, trello-integration.js, and attachment-processor.js.
-
-### Truthfulness Verification
-
-- Confidence is displayed as a review signal; no claim of 99.9% accuracy anywhere in test-verified documents.
-- Attachment text extraction is gated and labeled metadata-only for binary files.
-- Trello comment posting is approval-gated.
-- Backend is documented as functional but not production-grade.
-
-## What Is Still Partial
-
-- Binary attachment extraction beyond text/CSV is not fully implemented in the shipped flow.
-- Backend/admin subsystem is functional (in-memory, local) but not production-grade: no persistent DB, no password hashing, not verified for production deployment.
-- The live Trello verification evidence is user-performed manual evidence (2026-07-12) rather than locally reproducible automated evidence.
-- Trello description writeback is not implemented.
-- Measured accuracy proof is not available; confidence is a heuristic signal.
-
-## Commands Run (Phase 115)
-
-```bash
-git status --short
-git branch --all
-git log --oneline --decorate -n 20
-find . -maxdepth 3 -type f | sort | sed -n '1,240p'
-grep -RniE "TODO|FIXME|HACK|mock|fake|placeholder|not implemented|coming soon|unsafe|password|secret|token" . --include='*.js' --include='*.html' -l
-node test.js
-node backend.test.js
-node doctor.js
-node -e "require('./summarizer-core'); require('./card-intelligence-ledger'); require('./attachment-processor'); require('./ai-providers'); require('./trello-integration'); console.log('core-modules-ok')"
-```
-
-## Build/Test/Lint Results
-
-- `node test.js` — PASSED
-- `node backend.test.js` — PASSED
-- `node doctor.js` — PASSED (30/30 checks)
-- No linting tool configured (not required for this repo stack)
-- No build step required for static Power-Up
-
-## How to Run Locally
-
-See `docs/OPERATOR_RUNBOOK.md` for full instructions.
-
-Quick start:
-```bash
-npm start                  # Start local static file server on port 17117
-npm run doctor             # Verify all required files and modules
-npm test                   # Run full test suite
-```
-
-## How to Verify the Critical Path
-
-1. `npm start` — starts the local server at http://127.0.0.1:17117/
-2. Open http://127.0.0.1:17117/connector.html in browser
-3. With Trello Power-Up installed: open a Trello card → click "Summarize This" → verify popup loads and card context is fetched → verify summary is generated → verify export/review works.
-4. Run `node test.js` to verify the automated contract.
-
-## Current Outcome
-
-- Static Power-Up flow: verified as the active product (automated + previously manual)
-- Optional proxy reference: verified as present and documented
-- Backend API: verified as runnable locally (in-memory), not production-grade
-- Live Trello runtime behavior: manually verified 2026-07-12, repeated manual verification recommended before any production Power-Up listing
+- Merge this branch, let the Pages workflow deploy `main`, and verify the live deployment manifest.
+- Update the existing Trello Power-Up connector/icon origin only after the live URLs return successfully.
+- Run approval-gated Trello comment and description tests on an expendable card after deployment.
+- Create the HAI `json-feed` source under the owner's authenticated HAI session and allowlist only the selected ngrok hostname.
+- Use a representative independently labeled held-out dataset before making any accuracy claim.
+- Add code signing for a lower-friction Windows SmartScreen experience.
+- Add managed ingress, secret management, monitoring, encrypted offsite backups, and a read/write data-model redesign before horizontal multi-instance operation.
 
 ## No-False-Completion Statement
 
-This repository is a truthfully scoped Trello Power-Up with:
-- A verified browser-based critical path
-- Automated test coverage for core logic and contracts
-- Manual live-runtime verification evidence (2026-07-12)
-- A functional local backend that is honestly documented as not production-grade
-- Incomplete areas (description writeback, measured accuracy, binary OCR) clearly labeled Missing or Partial
-
-Phase 115 is **complete** for the verified local scope. Production readiness requires: external provider credentials, live Trello Power-Up listing approval, and persistent database provisioning.
+All supported local and single-instance release paths have code and verification evidence. External provider and account outcomes remain explicit. Deterministic summaries and confidence are review aids, not verified facts or measured accuracy. Trello writes, backend persistence, public tunnels, and HAI export require deliberate user action.

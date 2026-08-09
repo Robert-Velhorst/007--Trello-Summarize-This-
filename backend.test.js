@@ -1,113 +1,269 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
-const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const { PassThrough } = require("node:stream");
 
-process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin-secret";
+process.env.JWT_SECRET = "test-session-secret-for-contract-tests-32chars";
+process.env.ADMIN_PASSWORD = "test-admin-password-12-chars";
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@example.com";
 process.env.OPENAI_API_KEY = "";
 process.env.ANTHROPIC_API_KEY = "";
 process.env.GOOGLE_API_KEY = "";
 process.env.PROXY_ENDPOINT = "";
+process.env.DATABASE_URL = "";
+process.env.HAI_CONNECTOR_ENABLED = "true";
 
-const { startBackendServer } = require("./backend-server");
-const { DEFAULT_RUNTIME_STORE_PATH } = require("./backend-storage");
+const { createBackendApp } = require("./backend-app");
+const { DEFAULT_RUNTIME_STORE_PATH, LocalBackendStore } = require("./backend-storage");
+const backendConfig = require("./backend-config");
 
-async function requestJson(baseUrl, method, path, body, headers = {}) {
-  const target = new URL(`${baseUrl}${path}`);
-  const payload = body === undefined ? "" : JSON.stringify(body);
+function sessionTokenHash(token) {
+  return crypto.createHmac("sha256", process.env.JWT_SECRET).update(token).digest("hex");
+}
 
-  return new Promise((resolve, reject) => {
-    const request = http.request({
-      protocol: target.protocol,
-      hostname: target.hostname,
-      port: target.port,
-      path: `${target.pathname}${target.search}`,
-      method,
-      headers: Object.assign({
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(payload)
-      }, headers)
-    }, (response) => {
-      const chunks = [];
-      response.on("data", (chunk) => chunks.push(chunk));
-      response.on("end", () => {
-        const text = Buffer.concat(chunks).toString("utf8");
-        let data = null;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch (_error) {
-          data = text;
-        }
-        resolve({ status: response.statusCode, data });
-      });
+async function requestJson(app, method, targetPath, body, headers = {}, rawBody, remoteAddress = "127.0.0.1") {
+  const payload = rawBody === undefined ? (body === undefined ? "" : JSON.stringify(body)) : String(rawBody);
+  const normalizedHeaders = Object.fromEntries(
+    Object.entries(Object.assign({
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload)
+    }, headers)).map(([key, value]) => [key.toLowerCase(), value])
+  );
+
+  const req = new PassThrough();
+  req.method = method;
+  req.url = targetPath;
+  req.headers = normalizedHeaders;
+  req.socket = { remoteAddress };
+
+  const res = new PassThrough();
+  res.statusCode = 200;
+  res.headers = {};
+  res.setHeader = (name, value) => {
+    res.headers[String(name).toLowerCase()] = value;
+  };
+  res.getHeader = (name) => res.headers[String(name).toLowerCase()];
+  res.writeHead = (statusCode, responseHeaders = {}) => {
+    res.statusCode = statusCode;
+    Object.entries(responseHeaders).forEach(([name, value]) => res.setHeader(name, value));
+    return res;
+  };
+
+  const chunks = [];
+  const responsePromise = new Promise((resolve, reject) => {
+    res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    res.on("finish", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (_error) {
+        data = text;
+      }
+      resolve({ status: res.statusCode, data, headers: res.headers });
     });
-
-    request.on("error", reject);
-    if (payload) {
-      request.write(payload);
-    }
-    request.end();
+    res.on("error", reject);
   });
+
+  if (payload) {
+    req.end(payload);
+  } else {
+    req.end();
+  }
+
+  await app.handle(req, res);
+  return responsePromise;
 }
 
 async function main() {
-  const filePath = path.join(os.tmpdir(), `summarize-this-backend-test-${Date.now()}.json`);
+  const storageDirectory = path.join(os.tmpdir(), `summarize-this-backend-test-${Date.now()}`);
+  const filePath = path.join(storageDirectory, "store.json");
   const storagePathAlias = path.join(os.tmpdir(), `summarize-this-backend-alias-${Date.now()}.json`);
   const precedencePath = path.join(os.tmpdir(), `summarize-this-backend-precedence-${Date.now()}.json`);
-  const { server } = await startBackendServer({ host: "127.0.0.1", port: 0, allowMissingEnv: false, filePath });
-  const address = server.address();
-  const baseUrl = `http://${address.address}:${address.port}`;
+  const databaseUrlPath = path.join(os.tmpdir(), `summarize-this-backend-db-url-${Date.now()}.json`);
+  const environmentStorePath = path.join(os.tmpdir(), `summarize-this-backend-env-store-${Date.now()}.json`);
+  const app = await createBackendApp({ filePath });
   const customUserEmail = "custom-file-path@test.example";
+  const secondaryUserEmail = "secondary-user@test.example";
 
-  try {
-    const health = await requestJson(baseUrl, "GET", "/api/health");
-    assert.equal(health.status, 200);
-    assert.equal(health.data.status, "ok");
+  const health = await requestJson(app, "GET", "/api/health");
+  assert.equal(health.status, 200);
+  assert.equal(health.data.status, "ok");
+  assert.equal(health.data.storage.users, 0);
+  const concurrentEventIds = Array.from({ length: 8 }, (_item, index) => `concurrent-event-${index}`);
+  await Promise.all(concurrentEventIds.map((id) => app.store.add("events", {
+    id,
+    type: "contract.concurrent_write",
+    payload: { userId: "contract-user", index: id }
+  })));
+  const concurrentSnapshot = await app.store.snapshot();
+  assert.equal(concurrentSnapshot.events.filter((item) => concurrentEventIds.includes(item.id)).length, concurrentEventIds.length);
+  const persistedConcurrentStore = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  assert.equal(persistedConcurrentStore.events.filter((item) => concurrentEventIds.includes(item.id)).length, concurrentEventIds.length);
+  const validReadiness = backendConfig.backendReadiness();
+  assert.equal(validReadiness.ok, true);
+  const validSessionSecret = process.env.JWT_SECRET;
+  const validAdminPassword = process.env.ADMIN_PASSWORD;
+  process.env.JWT_SECRET = "too-short";
+  process.env.ADMIN_PASSWORD = "short";
+  const weakReadiness = backendConfig.backendReadiness();
+  assert.equal(weakReadiness.ok, false);
+  assert.ok(weakReadiness.missing.some((item) => item.startsWith("JWT_SECRET (minimum 32")));
+  assert.ok(weakReadiness.missing.some((item) => item.startsWith("ADMIN_PASSWORD (minimum 12")));
+  process.env.JWT_SECRET = "replace-with-at-least-32-random-characters";
+  process.env.ADMIN_PASSWORD = "replace-with-at-least-12-random-characters";
+  const placeholderReadiness = backendConfig.backendReadiness();
+  assert.equal(placeholderReadiness.ok, false);
+  assert.equal(placeholderReadiness.missing.length, 2);
+  process.env.JWT_SECRET = validSessionSecret;
+  process.env.ADMIN_PASSWORD = validAdminPassword;
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(storageDirectory).mode & 0o077, 0);
+    assert.equal(fs.statSync(filePath).mode & 0o077, 0);
+  }
 
-    const customRegister = await requestJson(baseUrl, "POST", "/api/auth/register", {
-      email: customUserEmail,
-      password: "custom-file-pass",
-      name: "Custom File User"
+  const expiredToken = "expired-contract-token";
+  await app.store.createSession({
+    userId: "missing-user",
+    role: "user",
+    tokenHash: sessionTokenHash(expiredToken),
+    expiresAt: "2000-01-01T00:00:00.000Z"
+  });
+  const expiredSessionRequest = await requestJson(app, "GET", "/api/user/profile", undefined, {
+    Authorization: `Bearer ${expiredToken}`
+  });
+  assert.equal(expiredSessionRequest.status, 401);
+  const expiredSession = (await app.store.list("sessions")).find((item) => item.tokenHash === sessionTokenHash(expiredToken));
+  assert.ok(expiredSession.revokedAt);
+  const healthAfterExpiredSession = await requestJson(app, "GET", "/api/health");
+  assert.equal(healthAfterExpiredSession.data.storage.sessions, 0);
+
+  const invalidJson = await requestJson(app, "POST", "/api/auth/register", undefined, {}, "{");
+  assert.equal(invalidJson.status, 400);
+  assert.equal(invalidJson.data.error, "Invalid JSON body");
+
+  const allowedPreflight = await requestJson(app, "OPTIONS", "/api/user/profile", undefined, {
+    Origin: "http://127.0.0.1:17117"
+  });
+  assert.equal(allowedPreflight.status, 204);
+  assert.equal(allowedPreflight.headers["access-control-allow-origin"], "http://127.0.0.1:17117");
+  assert.equal(allowedPreflight.headers.vary, "Origin");
+
+  const rejectedOrigin = await requestJson(app, "GET", "/api/health", undefined, {
+    Origin: "https://untrusted.example"
+  });
+  assert.equal(rejectedOrigin.status, 403);
+  assert.equal(rejectedOrigin.headers["access-control-allow-origin"], undefined);
+
+  const invalidRegister = await requestJson(app, "POST", "/api/auth/register", {
+    email: "not-an-email",
+    password: "custom-file-pass",
+    name: "Invalid Email User"
+  });
+  assert.equal(invalidRegister.status, 400);
+
+  const weakPasswordRegister = await requestJson(app, "POST", "/api/auth/register", {
+    email: "weak-password@test.example",
+    password: "too-short",
+    name: "Weak Password User"
+  });
+  assert.equal(weakPasswordRegister.status, 400);
+  assert.match(weakPasswordRegister.data.error, /at least 12 characters/i);
+
+  const oversizedBody = await requestJson(app, "POST", "/api/auth/register", undefined, {}, JSON.stringify({
+    email: "oversized@test.example",
+    password: "oversized-password",
+    name: "x".repeat(1024 * 1024)
+  }));
+  assert.equal(oversizedBody.status, 413);
+
+  const customRegister = await requestJson(app, "POST", "/api/auth/register", {
+    email: customUserEmail,
+    password: "custom-file-pass",
+    name: "Custom File User"
+  });
+  assert.equal(customRegister.status, 201);
+  assert.ok(customRegister.data.token);
+  const storedRegistrationSession = (await app.store.list("sessions")).find((item) => item.userId === customRegister.data.user.id);
+  assert.equal(storedRegistrationSession.tokenHash, sessionTokenHash(customRegister.data.token));
+  assert.notEqual(storedRegistrationSession.tokenHash, crypto.createHash("sha256").update(customRegister.data.token).digest("hex"));
+
+  const secondaryRegister = await requestJson(app, "POST", "/api/auth/register", {
+    email: secondaryUserEmail,
+    password: "secondary-file-pass",
+    name: "Secondary Test User"
+  });
+  assert.equal(secondaryRegister.status, 201);
+
+  const predictableBootstrapLogin = await requestJson(app, "POST", "/api/auth/login", {
+    email: "test@example.com",
+    password: "correct-password"
+  });
+  assert.equal(predictableBootstrapLogin.status, 401);
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const failedLogin = await requestJson(app, "POST", "/api/auth/login", {
+      email: "rate-limited-login@test.example",
+      password: "incorrect-password"
     });
-    assert.equal(customRegister.status, 201);
-    assert.ok(customRegister.data.token);
+    assert.equal(failedLogin.status, 401);
+  }
+  const throttledLogin = await requestJson(app, "POST", "/api/auth/login", {
+    email: "rate-limited-login@test.example",
+    password: "incorrect-password"
+  });
+  assert.equal(throttledLogin.status, 429);
 
-    const readiness = await requestJson(baseUrl, "GET", "/api/readiness");
-    assert.equal(readiness.status, 200);
-    assert.equal(readiness.data.status, "ready");
+  const sharedClientAddress = "198.51.100.22";
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const sharedClientLogin = await requestJson(app, "POST", "/api/auth/login", {
+      email: `client-limit-${attempt}@test.example`,
+      password: "incorrect-password"
+    }, {}, undefined, sharedClientAddress);
+    assert.equal(sharedClientLogin.status, 401);
+  }
+  const sharedClientThrottled = await requestJson(app, "POST", "/api/auth/login", {
+    email: "client-limit-final@test.example",
+    password: "incorrect-password"
+  }, {}, undefined, sharedClientAddress);
+  assert.equal(sharedClientThrottled.status, 429);
+  assert.match(sharedClientThrottled.data.error, /from this client/i);
 
-    const login = await requestJson(baseUrl, "POST", "/api/auth/login", {
-      email: "test@example.com",
-      password: "correct-password"
-    });
-    assert.equal(login.status, 200);
-    assert.ok(login.data.token);
+  const readiness = await requestJson(app, "GET", "/api/readiness");
+  assert.equal(readiness.status, 200);
+  assert.equal(readiness.data.status, "ready");
 
-    const token = login.data.token;
-    const secondLogin = await requestJson(baseUrl, "POST", "/api/auth/login", {
-      email: "test@example.com",
-      password: "correct-password"
-    });
-    assert.equal(secondLogin.status, 200);
-    assert.notEqual(secondLogin.data.token, token);
+  const login = await requestJson(app, "POST", "/api/auth/login", {
+    email: customUserEmail,
+    password: "custom-file-pass"
+  });
+  assert.equal(login.status, 200);
+  assert.ok(login.data.token);
 
-    const profile = await requestJson(baseUrl, "GET", "/api/user/profile", undefined, {
-      Authorization: `Bearer ${token}`
-    });
-    assert.equal(profile.status, 200);
-    assert.equal(profile.data.user.email, "test@example.com");
+  const token = login.data.token;
+  const secondLogin = await requestJson(app, "POST", "/api/auth/login", {
+    email: customUserEmail,
+    password: "custom-file-pass"
+  });
+  assert.equal(secondLogin.status, 200);
+  assert.notEqual(secondLogin.data.token, token);
 
-    const shortSummary = await requestJson(baseUrl, "POST", "/api/summarize", {
-      text: "too short"
-    }, {
-      Authorization: `Bearer ${token}`
-    });
-    assert.equal(shortSummary.status, 400);
+  const profile = await requestJson(app, "GET", "/api/user/profile", undefined, {
+    Authorization: `Bearer ${token}`
+  });
+  assert.equal(profile.status, 200);
+  assert.equal(profile.data.user.email, customUserEmail);
 
-    const proxyGuard = await requestJson(baseUrl, "POST", "/api/summarize", {
+  const shortSummary = await requestJson(app, "POST", "/api/summarize", {
+    text: "too short"
+  }, {
+    Authorization: `Bearer ${token}`
+  });
+  assert.equal(shortSummary.status, 400);
+
+    const proxyGuard = await requestJson(app, "POST", "/api/summarize", {
       text: "This text is definitely long enough to be summarized safely in the backend contract test case.",
       proxy: { enabled: true },
       provider: { apiKey: "browser-key-should-not-pass" }
@@ -116,7 +272,7 @@ async function main() {
     });
     assert.equal(proxyGuard.status, 422);
 
-    const directModeBlocked = await requestJson(baseUrl, "POST", "/api/summarize", {
+    const directModeBlocked = await requestJson(app, "POST", "/api/summarize", {
       text: "This text is definitely long enough to be summarized safely in the backend contract test case.",
       provider: { apiKey: "browser-key-should-not-pass" }
     }, {
@@ -124,7 +280,7 @@ async function main() {
     });
     assert.equal(directModeBlocked.status, 422);
 
-    const summary = await requestJson(baseUrl, "POST", "/api/summarize", {
+    const summary = await requestJson(app, "POST", "/api/summarize", {
       text: "This text is definitely long enough to be summarized safely in the backend contract test case.",
       method: "hybrid"
     }, {
@@ -132,15 +288,27 @@ async function main() {
     });
     assert.equal(summary.status, 200);
     assert.equal(summary.data.result.providerMode, "local");
+    assert.deepEqual(summary.data.result.evidence.inferences, []);
+    assert.equal(summary.data.result.evidence.facts[0].source, "submitted text");
+    assert.ok(summary.data.result.evidence.uncertainty.length > 0);
 
-    const idempotentSummaryFirst = await requestJson(baseUrl, "POST", "/api/summarize", {
+    const providerRequest = await requestJson(app, "POST", "/api/summarize", {
+      text: "This text is definitely long enough to prove that unsupported provider execution is rejected by the backend.",
+      provider: { apiKey: "browser-key-must-not-be-used" }
+    }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(providerRequest.status, 422);
+    assert.match(providerRequest.data.error, /only supports deterministic local summaries/i);
+
+    const idempotentSummaryFirst = await requestJson(app, "POST", "/api/summarize", {
       text: "This text is definitely long enough to be summarized safely in the backend contract test case.",
       method: "hybrid"
     }, {
       Authorization: `Bearer ${token}`,
       "Idempotency-Key": "contract-summary-1"
     });
-    const idempotentSummarySecond = await requestJson(baseUrl, "POST", "/api/summarize", {
+    const idempotentSummarySecond = await requestJson(app, "POST", "/api/summarize", {
       text: "This text is definitely long enough to be summarized safely in the backend contract test case.",
       method: "hybrid"
     }, {
@@ -151,45 +319,91 @@ async function main() {
     assert.equal(idempotentSummarySecond.status, 200);
     assert.equal(idempotentSummaryFirst.data.result.id, idempotentSummarySecond.data.result.id);
 
-    const credits = await requestJson(baseUrl, "GET", "/api/user/credits", undefined, {
+    const rejectedReviewedSummary = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true,
+      title: "Unsafe source URL",
+      content: "This reviewed summary must not accept a source URL carrying credentials.",
+      sourceUri: "https://example.test/card?token=secret"
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(rejectedReviewedSummary.status, 400);
+
+    const reviewedSummary = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true,
+      haiApproved: true,
+      title: "Contract card summary",
+      content: "The exact reviewed summary content approved for HAI ingestion.",
+      sourceUri: "https://trello.com/c/abc123/contract-card?irrelevant=removed#section",
+      cardId: "abc123",
+      runId: "run-contract-1",
+      providerMode: "local",
+      confidence: 0.9
+    }, {
+      Authorization: `Bearer ${token}`,
+      "Idempotency-Key": "reviewed-contract-1"
+    });
+    assert.equal(reviewedSummary.status, 201);
+    assert.ok(reviewedSummary.data.summary.haiApprovedAt);
+    assert.equal(reviewedSummary.data.summary.sourceUri, "https://trello.com/c/abc123/contract-card");
+
+    const listedSummaries = await requestJson(app, "GET", "/api/summaries?limit=100", undefined, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(listedSummaries.status, 200);
+    assert.ok(listedSummaries.data.summaries.some((item) => item.id === reviewedSummary.data.summary.id));
+
+    const firstHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(firstHaiToken.status, 201);
+    assert.match(firstHaiToken.data.feedPath, /^\/api\/integrations\/hai\/feed\/hai_/);
+    const storedHaiTokens = await app.store.list("haiTokens");
+    assert.equal(storedHaiTokens.some((item) => item.tokenHash === firstHaiToken.data.token), false);
+
+    const haiFeed = await requestJson(app, "GET", firstHaiToken.data.feedPath);
+    assert.equal(haiFeed.status, 200);
+    assert.equal(haiFeed.data.items.length, 1);
+    assert.equal(haiFeed.data.items[0].externalId, `summarize-this:${reviewedSummary.data.summary.id}`);
+    assert.equal(haiFeed.data.items[0].content, "The exact reviewed summary content approved for HAI ingestion.");
+    assert.equal(haiFeed.data.items[0].sourceUri, "https://trello.com/c/abc123/contract-card");
+    assert.ok(haiFeed.data.nextCursor);
+    const emptyHaiFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(haiFeed.data.nextCursor)}`);
+    assert.equal(emptyHaiFeed.status, 200);
+    assert.deepEqual(emptyHaiFeed.data.items, []);
+
+    const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(rotatedHaiToken.status, 201);
+    assert.equal((await requestJson(app, "GET", firstHaiToken.data.feedPath)).status, 404);
+    assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 200);
+    const revokedHaiToken = await requestJson(app, "DELETE", "/api/integrations/hai/token", undefined, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(revokedHaiToken.status, 200);
+    assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 404);
+
+    const credits = await requestJson(app, "GET", "/api/user/credits", undefined, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(credits.status, 200);
     assert.equal(typeof credits.data.credits, "number");
 
-    const activity = await requestJson(baseUrl, "GET", "/api/user/activity", undefined, {
+    const activity = await requestJson(app, "GET", "/api/user/activity", undefined, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(activity.status, 200);
     assert.ok(Array.isArray(activity.data.activities));
 
-    const purchase = await requestJson(baseUrl, "POST", "/api/credits/purchase", {
+    const purchase = await requestJson(app, "POST", "/api/credits/purchase", {
       package: "basic",
       paymentMethodId: "pm_test"
     }, {
       Authorization: `Bearer ${token}`
     });
-    assert.equal(purchase.status, 200);
+    assert.equal(purchase.status, 503);
+    assert.match(purchase.data.error, /no verified payment processor/i);
 
-    const idempotentPurchaseOne = await requestJson(baseUrl, "POST", "/api/credits/purchase", {
-      package: "basic",
-      paymentMethodId: "pm_test_repeat"
-    }, {
-      Authorization: `Bearer ${token}`,
-      "Idempotency-Key": "contract-purchase-1"
-    });
-    const idempotentPurchaseTwo = await requestJson(baseUrl, "POST", "/api/credits/purchase", {
-      package: "basic",
-      paymentMethodId: "pm_test_repeat"
-    }, {
-      Authorization: `Bearer ${token}`,
-      "Idempotency-Key": "contract-purchase-1"
-    });
-    assert.equal(idempotentPurchaseOne.status, 200);
-    assert.equal(idempotentPurchaseTwo.status, 200);
-    assert.equal(idempotentPurchaseOne.data.transaction.id, idempotentPurchaseTwo.data.transaction.id);
-
-    const batchCreated = await requestJson(baseUrl, "POST", "/api/batch/jobs", {
+    const batchCreated = await requestJson(app, "POST", "/api/batch/jobs", {
       aiHandoffApproved: true,
       listName: "Contract test list",
       cards: [
@@ -204,25 +418,25 @@ async function main() {
     assert.equal(batchCreated.data.job.cards.length, 2);
     assert.equal(batchCreated.data.job.listName, "Contract test list");
 
-    const batchList = await requestJson(baseUrl, "GET", "/api/batch/jobs", undefined, {
+    const batchList = await requestJson(app, "GET", "/api/batch/jobs", undefined, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(batchList.status, 200);
     assert.ok(batchList.data.jobs.some((item) => item.id === batchCreated.data.job.id));
 
-    const batchGet = await requestJson(baseUrl, "GET", `/api/batch/jobs/${batchCreated.data.job.id}`, undefined, {
+    const batchGet = await requestJson(app, "GET", `/api/batch/jobs/${batchCreated.data.job.id}`, undefined, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(batchGet.status, 200);
     assert.equal(batchGet.data.job.id, batchCreated.data.job.id);
 
-    const batchStart = await requestJson(baseUrl, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/start`, {}, {
+    const batchStart = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/start`, {}, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(batchStart.status, 200);
     assert.equal(batchStart.data.job.status, "running");
 
-    const batchCardOpened = await requestJson(baseUrl, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
+    const batchCardOpened = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
       status: "opened",
       attemptsDelta: 1
     }, {
@@ -232,7 +446,23 @@ async function main() {
     assert.equal(batchCardOpened.data.card.status, "opened");
     assert.equal(batchCardOpened.data.card.attempts, 1);
 
-    const batchCardAnalyzed = await requestJson(baseUrl, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
+    const fabricatedCompletedCard = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
+      status: "completed"
+    }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(fabricatedCompletedCard.status, 422);
+    assert.match(fabricatedCompletedCard.data.error, /recognized reviewed-workflow state/i);
+
+    const analyzedWithoutResult = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
+      status: "analyzed"
+    }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(analyzedWithoutResult.status, 422);
+    assert.match(analyzedWithoutResult.data.error, /requires an observed result object/i);
+
+    const batchCardAnalyzed = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-1`, {
       status: "analyzed",
       result: {
         summary: "Reviewed card one",
@@ -245,7 +475,7 @@ async function main() {
     assert.equal(batchCardAnalyzed.data.card.status, "analyzed");
     assert.equal(batchCardAnalyzed.data.card.result.summary, "Reviewed card one");
 
-    const batchMarkedPartial = await requestJson(baseUrl, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/status`, {
+    const batchMarkedPartial = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/status`, {
       status: "running",
       summary: "Manual popup runner in progress"
     }, {
@@ -254,73 +484,142 @@ async function main() {
     assert.equal(batchMarkedPartial.status, 200);
     assert.equal(batchMarkedPartial.data.job.summary, "Manual popup runner in progress");
 
-    const batchRun = await requestJson(baseUrl, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/run`, {}, {
+    const batchCardTwoAnalyzed = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/cards/card-2`, {
+      status: "analyzed",
+      result: {
+        summary: "Reviewed card two",
+        confidence: 0.73
+      }
+    }, {
       Authorization: `Bearer ${token}`
     });
-    assert.equal(batchRun.status, 200);
-    assert.equal(batchRun.data.job.status, "completed");
-    assert.equal(batchRun.data.job.cards.every((item) => item.status === "completed"), true);
+    assert.equal(batchCardTwoAnalyzed.status, 200);
 
-    const webhookMissing = await requestJson(baseUrl, "POST", "/api/webhooks/stripe", {});
-    assert.equal(webhookMissing.status, 400);
+    const batchReviewRequired = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/status`, {
+      summary: "2 card(s) analyzed and require human review. Trello write actions remained off."
+    }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(batchReviewRequired.status, 200);
+    assert.equal(batchReviewRequired.data.job.status, "review-required");
 
-    const webhookSigned = await requestJson(baseUrl, "POST", "/api/webhooks/stripe", {}, {
+    const directCompletionClaim = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/status`, {
+      status: "completed"
+    }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(directCompletionClaim.status, 422);
+    assert.match(directCompletionClaim.data.error, /derived from recorded card outcomes/i);
+
+    const batchRun = await requestJson(app, "POST", `/api/batch/jobs/${batchCreated.data.job.id}/run`, {}, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(batchRun.status, 409);
+    assert.match(batchRun.data.error, /reviewed Power-Up workflow/i);
+    assert.equal(batchRun.data.job.cards.some((item) => item.status === "completed"), false);
+
+    const webhookMissing = await requestJson(app, "POST", "/api/webhooks/stripe", {});
+    assert.equal(webhookMissing.status, 503);
+
+    const webhookSigned = await requestJson(app, "POST", "/api/webhooks/stripe", {}, {
       "stripe-signature": "test-signature"
     });
-    assert.ok(webhookSigned.status === 200 || webhookSigned.status === 202);
+    assert.equal(webhookSigned.status, 503);
 
-    const adminLogin = await requestJson(baseUrl, "POST", "/api/admin/auth/login", {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const failedAdminLogin = await requestJson(app, "POST", "/api/admin/auth/login", {
+        email: "rate-limited-admin@test.example",
+        password: "incorrect-password"
+      });
+      assert.equal(failedAdminLogin.status, 401);
+    }
+    const throttledAdminLogin = await requestJson(app, "POST", "/api/admin/auth/login", {
+      email: "rate-limited-admin@test.example",
+      password: "incorrect-password"
+    });
+    assert.equal(throttledAdminLogin.status, 429);
+
+    const adminLogin = await requestJson(app, "POST", "/api/admin/auth/login", {
       email: "admin@example.com",
-      password: "admin-secret"
+      password: process.env.ADMIN_PASSWORD
     });
     assert.equal(adminLogin.status, 200);
     assert.ok(adminLogin.data.token);
     const adminToken = adminLogin.data.token;
 
-    const adminRefresh = await requestJson(baseUrl, "POST", "/api/admin/auth/refresh", {}, {
+    const adminRefresh = await requestJson(app, "POST", "/api/admin/auth/refresh", {}, {
       Authorization: `Bearer ${adminToken}`
     });
     assert.equal(adminRefresh.status, 200);
     assert.ok(adminRefresh.data.token);
     const refreshedAdminToken = adminRefresh.data.token;
 
-    const unauthorizedMetrics = await requestJson(baseUrl, "GET", "/api/admin/dashboard/metrics");
+    const unauthorizedMetrics = await requestJson(app, "GET", "/api/admin/dashboard/metrics");
     assert.equal(unauthorizedMetrics.status, 401);
 
-    const adminHealth = await requestJson(baseUrl, "GET", "/api/admin/system/health", undefined, {
+    const adminHealth = await requestJson(app, "GET", "/api/admin/system/health", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(adminHealth.status, 200);
     assert.equal(adminHealth.data.status, "ok");
 
-    const users = await requestJson(baseUrl, "GET", "/api/admin/users", undefined, {
+    const users = await requestJson(app, "GET", "/api/admin/users", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(users.status, 200);
     assert.ok(Array.isArray(users.data.users));
 
     const userId = users.data.users[0].id;
-    const updateUser = await requestJson(baseUrl, "PUT", `/api/admin/users/${userId}`, {
+    const updateUser = await requestJson(app, "PUT", `/api/admin/users/${userId}`, {
       name: "Updated Test User"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(updateUser.status, 200);
     assert.equal(updateUser.data.user.name, "Updated Test User");
+    assert.equal(updateUser.data.user.email, customUserEmail);
 
-    const suspendUser = await requestJson(baseUrl, "POST", `/api/admin/users/${userId}/suspend`, {
+    const roleMutation = await requestJson(app, "PUT", `/api/admin/users/${userId}`, {
+      role: "admin"
+    }, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(roleMutation.status, 422);
+    assert.match(roleMutation.data.error, /not mutable/i);
+
+    const userRoleAfterMutation = await requestJson(app, "GET", `/api/admin/users/${userId}`, undefined, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(userRoleAfterMutation.status, 200);
+    assert.equal(userRoleAfterMutation.data.user.role, "user");
+
+    const invalidAdminEmail = await requestJson(app, "PUT", `/api/admin/users/${userId}`, {
+      email: "not-an-email"
+    }, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(invalidAdminEmail.status, 400);
+
+    const duplicateAdminEmail = await requestJson(app, "PUT", `/api/admin/users/${userId}`, {
+      email: secondaryUserEmail
+    }, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(duplicateAdminEmail.status, 409);
+
+    const suspendUser = await requestJson(app, "POST", `/api/admin/users/${userId}/suspend`, {
       reason: "contract test"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(suspendUser.status, 200);
 
-    const unsuspendUser = await requestJson(baseUrl, "POST", `/api/admin/users/${userId}/unsuspend`, {}, {
+    const unsuspendUser = await requestJson(app, "POST", `/api/admin/users/${userId}/unsuspend`, {}, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(unsuspendUser.status, 200);
 
-    const adjustCredits = await requestJson(baseUrl, "POST", `/api/admin/users/${userId}/credits/adjust`, {
+    const adjustCredits = await requestJson(app, "POST", `/api/admin/users/${userId}/credits/adjust`, {
       amount: 7,
       reason: "manual test adjustment"
     }, {
@@ -330,7 +629,7 @@ async function main() {
     assert.equal(adjustCredits.status, 200);
     assert.equal(adjustCredits.data.transaction.type, "admin_credit_adjustment");
 
-    const adjustCreditsRepeat = await requestJson(baseUrl, "POST", `/api/admin/users/${userId}/credits/adjust`, {
+    const adjustCreditsRepeat = await requestJson(app, "POST", `/api/admin/users/${userId}/credits/adjust`, {
       amount: 7,
       reason: "manual test adjustment"
     }, {
@@ -340,7 +639,7 @@ async function main() {
     assert.equal(adjustCreditsRepeat.status, 200);
     assert.equal(adjustCreditsRepeat.data.transaction.id, adjustCredits.data.transaction.id);
 
-    const bulkAdjust = await requestJson(baseUrl, "POST", "/api/admin/credits/bulk-adjust", {
+    const bulkAdjust = await requestJson(app, "POST", "/api/admin/credits/bulk-adjust", {
       adjustments: [{ userId, amount: 3, reason: "bulk contract test" }]
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
@@ -348,40 +647,41 @@ async function main() {
     assert.equal(bulkAdjust.status, 200);
     assert.equal(bulkAdjust.data.results[0].success, true);
 
-    const transactions = await requestJson(baseUrl, "GET", "/api/admin/transactions", undefined, {
+    const transactions = await requestJson(app, "GET", "/api/admin/transactions", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(transactions.status, 200);
     assert.ok(Array.isArray(transactions.data.transactions));
 
     const transactionId = transactions.data.transactions[0].id;
-    const review = await requestJson(baseUrl, "POST", `/api/admin/transactions/${transactionId}/review`, {
+    const review = await requestJson(app, "POST", `/api/admin/transactions/${transactionId}/review`, {
       notes: "Reviewed in contract test"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(review.status, 200);
 
-    const refund = await requestJson(baseUrl, "POST", `/api/admin/transactions/${transactionId}/refund`, {
+    const refund = await requestJson(app, "POST", `/api/admin/transactions/${transactionId}/refund`, {
       reason: "contract test refund"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(refund.status, 200);
+    assert.equal(refund.status, 503);
+    assert.match(refund.data.error, /cannot verify or execute a payment-provider refund/i);
 
-    const audit = await requestJson(baseUrl, "GET", "/api/admin/audit", undefined, {
+    const audit = await requestJson(app, "GET", "/api/admin/audit", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(audit.status, 200);
     assert.ok(Array.isArray(audit.data.events));
     assert.ok(Array.isArray(audit.data.reviews));
 
-    const settings = await requestJson(baseUrl, "GET", "/api/admin/settings", undefined, {
+    const settings = await requestJson(app, "GET", "/api/admin/settings", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(settings.status, 200);
 
-    const updateSettings = await requestJson(baseUrl, "PUT", "/api/admin/settings", {
+    const updateSettings = await requestJson(app, "PUT", "/api/admin/settings", {
       providerMode: "local",
       proxyEndpoint: ""
     }, {
@@ -389,33 +689,33 @@ async function main() {
     });
     assert.equal(updateSettings.status, 200);
 
-    const settingsHistory = await requestJson(baseUrl, "GET", "/api/admin/settings/history", undefined, {
+    const settingsHistory = await requestJson(app, "GET", "/api/admin/settings/history", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(settingsHistory.status, 200);
     assert.ok(Array.isArray(settingsHistory.data.history));
 
-    const analytics = await requestJson(baseUrl, "GET", "/api/admin/analytics", undefined, {
+    const analytics = await requestJson(app, "GET", "/api/admin/analytics", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(analytics.status, 200);
 
-    const userAnalytics = await requestJson(baseUrl, "GET", "/api/admin/analytics/users", undefined, {
+    const userAnalytics = await requestJson(app, "GET", "/api/admin/analytics/users", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(userAnalytics.status, 200);
 
-    const revenueAnalytics = await requestJson(baseUrl, "GET", "/api/admin/analytics/revenue", undefined, {
+    const revenueAnalytics = await requestJson(app, "GET", "/api/admin/analytics/revenue", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(revenueAnalytics.status, 200);
 
-    const usageAnalytics = await requestJson(baseUrl, "GET", "/api/admin/analytics/usage", undefined, {
+    const usageAnalytics = await requestJson(app, "GET", "/api/admin/analytics/usage", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(usageAnalytics.status, 200);
 
-    const report = await requestJson(baseUrl, "POST", "/api/admin/reports/generate", {
+    const report = await requestJson(app, "POST", "/api/admin/reports/generate", {
       type: "usage",
       parameters: { window: "7d" }
     }, {
@@ -424,35 +724,44 @@ async function main() {
     assert.equal(report.status, 200);
     const reportId = report.data.report.id;
 
-    const reports = await requestJson(baseUrl, "GET", "/api/admin/reports", undefined, {
+    const reports = await requestJson(app, "GET", "/api/admin/reports", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(reports.status, 200);
 
-    const reportDownload = await requestJson(baseUrl, "GET", `/api/admin/reports/${reportId}/download`, undefined, {
+    const reportDownload = await requestJson(app, "GET", `/api/admin/reports/${reportId}/download`, undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(reportDownload.status, 200);
 
-    const backup = await requestJson(baseUrl, "POST", "/api/admin/backup/create", {
-      type: "full"
+    const backup = await requestJson(app, "POST", "/api/admin/backup/create", {
+      reason: "contract full backup"
     }, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(backup.status, 200);
-    const backupId = backup.data.backup.id;
+    assert.equal(backup.status, 201);
+    assert.equal(backup.data.backup.verified, true);
+    assert.match(backup.data.backup.sha256, /^[a-f0-9]{64}$/);
 
-    const backups = await requestJson(baseUrl, "GET", "/api/admin/backup/list", undefined, {
+    const backups = await requestJson(app, "GET", "/api/admin/backup/list", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(backups.status, 200);
+    assert.ok(backups.data.backups.some((item) => item.id === backup.data.backup.id));
 
-    const restoreBackup = await requestJson(baseUrl, "POST", `/api/admin/backup/${backupId}/restore`, {}, {
+    const restoreBackup = await requestJson(app, "POST", "/api/admin/backup/not-a-real-backup/restore", {}, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(restoreBackup.status, 200);
+    assert.equal(restoreBackup.status, 400);
+    assert.match(restoreBackup.data.error, /confirm=true/i);
 
-    const maintenance = await requestJson(baseUrl, "POST", "/api/admin/maintenance/schedule", {
+    const verifiedRestore = await requestJson(app, "POST", `/api/admin/backup/${backup.data.backup.id}/restore`, { confirm: true }, {
+      Authorization: `Bearer ${refreshedAdminToken}`
+    });
+    assert.equal(verifiedRestore.status, 200);
+    assert.equal(verifiedRestore.data.restored.backup.id, backup.data.backup.id);
+
+    const maintenance = await requestJson(app, "POST", "/api/admin/maintenance/schedule", {
       startsAt: "2026-07-20T10:00:00.000Z",
       endsAt: "2026-07-20T11:00:00.000Z",
       note: "contract maintenance"
@@ -461,40 +770,53 @@ async function main() {
     });
     assert.equal(maintenance.status, 200);
 
-    const maintenanceWindows = await requestJson(baseUrl, "GET", "/api/admin/maintenance/windows", undefined, {
+    const maintenanceWindows = await requestJson(app, "GET", "/api/admin/maintenance/windows", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(maintenanceWindows.status, 200);
 
-    const restartService = await requestJson(baseUrl, "POST", "/api/admin/system/services/api/restart", {}, {
+    const restartService = await requestJson(app, "POST", "/api/admin/system/services/api/restart", {}, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
-    assert.equal(restartService.status, 200);
+    assert.equal(restartService.status, 503);
+    assert.match(restartService.data.error, /no verified service-control integration/i);
 
-    const alerts = await requestJson(baseUrl, "GET", "/api/admin/system/alerts", undefined, {
+    const alerts = await requestJson(app, "GET", "/api/admin/system/alerts", undefined, {
       Authorization: `Bearer ${refreshedAdminToken}`
     });
     assert.equal(alerts.status, 200);
     assert.ok(Array.isArray(alerts.data.alerts));
 
     if (alerts.data.alerts.length) {
-      const acknowledgeAlert = await requestJson(baseUrl, "POST", `/api/admin/system/alerts/${alerts.data.alerts[0].id}/acknowledge`, {}, {
+      const acknowledgeAlert = await requestJson(app, "POST", `/api/admin/system/alerts/${alerts.data.alerts[0].id}/acknowledge`, {}, {
         Authorization: `Bearer ${refreshedAdminToken}`
       });
       assert.equal(acknowledgeAlert.status, 200);
     }
 
-    const logout = await requestJson(baseUrl, "POST", "/api/auth/logout", {}, {
+    const logout = await requestJson(app, "POST", "/api/auth/logout", {}, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(logout.status, 200);
-    const profileAfterLogout = await requestJson(baseUrl, "GET", "/api/user/profile", undefined, {
+    const profileAfterLogout = await requestJson(app, "GET", "/api/user/profile", undefined, {
       Authorization: `Bearer ${token}`
     });
     assert.equal(profileAfterLogout.status, 401);
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-  }
+
+  const originalFindUserByEmail = app.store.findUserByEmail.bind(app.store);
+  app.store.findUserByEmail = async () => {
+    throw new Error("unexpected storage failure api_key=must-not-reach-client");
+  };
+  const internalFailure = await requestJson(app, "POST", "/api/auth/register", {
+    email: "internal-failure@test.example",
+    password: "internal-failure-password",
+    name: "Internal Failure"
+  });
+  assert.equal(internalFailure.status, 500);
+  assert.equal(internalFailure.data.error, "Internal server error");
+  assert.doesNotMatch(JSON.stringify(internalFailure.data), /must-not-reach-client/);
+  assert.ok((await app.store.list("systemAlerts")).some((item) => /must-not-reach-client/.test(item.message)));
+  app.store.findUserByEmail = originalFindUserByEmail;
 
   assert.equal(fs.existsSync(filePath), true);
   const customStore = JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -506,53 +828,36 @@ async function main() {
     assert.ok(!runtimeStore.users.some((item) => item.email === customUserEmail));
   }
 
-  fs.rmSync(filePath, { force: true });
+  fs.rmSync(storageDirectory, { force: true, recursive: true });
 
-  const { server: aliasServer } = await startBackendServer({
-    host: "127.0.0.1",
-    port: 0,
-    allowMissingEnv: false,
+  const aliasApp = await createBackendApp({
     storagePath: storagePathAlias
   });
-  const aliasAddress = aliasServer.address();
-  const aliasBaseUrl = `http://${aliasAddress.address}:${aliasAddress.port}`;
 
-  try {
-    const aliasRegister = await requestJson(aliasBaseUrl, "POST", "/api/auth/register", {
-      email: "storage-alias@test.example",
-      password: "alias-pass",
-      name: "Storage Alias User"
-    });
-    assert.equal(aliasRegister.status, 201);
-  } finally {
-    await new Promise((resolve) => aliasServer.close(resolve));
-  }
+  const aliasRegister = await requestJson(aliasApp, "POST", "/api/auth/register", {
+    email: "storage-alias@test.example",
+    password: "alias-password",
+    name: "Storage Alias User"
+  });
+  assert.equal(aliasRegister.status, 201);
 
   assert.equal(fs.existsSync(storagePathAlias), true);
   const aliasStore = JSON.parse(fs.readFileSync(storagePathAlias, "utf8"));
   assert.ok(aliasStore.users.some((item) => item.email === "storage-alias@test.example"));
   fs.rmSync(storagePathAlias, { force: true });
 
-  const { server: precedenceServer } = await startBackendServer({
-    host: "127.0.0.1",
-    port: 0,
+  const precedenceApp = await createBackendApp({
     allowMissingEnv: false,
     filePath: precedencePath,
     storagePath: storagePathAlias
   });
-  const precedenceAddress = precedenceServer.address();
-  const precedenceBaseUrl = `http://${precedenceAddress.address}:${precedenceAddress.port}`;
 
-  try {
-    const precedenceRegister = await requestJson(precedenceBaseUrl, "POST", "/api/auth/register", {
-      email: "precedence@test.example",
-      password: "precedence-pass",
-      name: "Precedence User"
-    });
-    assert.equal(precedenceRegister.status, 201);
-  } finally {
-    await new Promise((resolve) => precedenceServer.close(resolve));
-  }
+  const precedenceRegister = await requestJson(precedenceApp, "POST", "/api/auth/register", {
+    email: "precedence@test.example",
+    password: "precedence-pass",
+    name: "Precedence User"
+  });
+  assert.equal(precedenceRegister.status, 201);
 
   assert.equal(fs.existsSync(precedencePath), true);
   const precedenceStore = JSON.parse(fs.readFileSync(precedencePath, "utf8"));
@@ -563,6 +868,24 @@ async function main() {
   }
   fs.rmSync(precedencePath, { force: true });
   fs.rmSync(storagePathAlias, { force: true });
+
+  process.env.DATABASE_URL = "postgresql://not-an-active-backend.example/summarize-this";
+  const databaseUrlApp = await createBackendApp({ filePath: databaseUrlPath });
+  assert.ok(databaseUrlApp.store instanceof LocalBackendStore);
+  assert.equal(fs.existsSync(databaseUrlPath), true);
+  await assert.rejects(
+    () => createBackendApp({ filePath: databaseUrlPath, storeType: "unsupported" }),
+    /Unsupported backend store/
+  );
+  process.env.DATABASE_URL = "";
+  fs.rmSync(databaseUrlPath, { force: true });
+
+  process.env.BACKEND_STORE_PATH = environmentStorePath;
+  const environmentStoreApp = await createBackendApp();
+  assert.equal(environmentStoreApp.store.filePath, environmentStorePath);
+  assert.equal(fs.existsSync(environmentStorePath), true);
+  delete process.env.BACKEND_STORE_PATH;
+  fs.rmSync(environmentStorePath, { force: true });
 
   console.log("Backend contract tests passed.");
 }

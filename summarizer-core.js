@@ -292,9 +292,9 @@
       instruction: "Write all user-facing summary values in Dutch."
     }
   };
-  var APP_VERSION = "1.0.4";
-  var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Noodzakelijk-Online/007--Trello-Summarize-This-/main/update.json";
-  var UPDATE_REPO_URL_PREFIX = "https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-";
+  var APP_VERSION = "1.1.0";
+  var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json";
+  var UPDATE_REPO_URL_PREFIX = "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-";
 
   function boundedNumber(value, fallback, min, max) {
     var number = Number(value);
@@ -337,7 +337,7 @@
         parsed.href.indexOf(UPDATE_REPO_URL_PREFIX) === 0;
       var allowedRawManifest = parsed.protocol === "https:" &&
         parsed.hostname === "raw.githubusercontent.com" &&
-        /^\/Noodzakelijk-Online\/007--Trello-Summarize-This-\//.test(parsed.pathname);
+        /^\/Robert-Velhorst\/007--Trello-Summarize-This-\//.test(parsed.pathname);
 
       return allowedGithub || allowedRawManifest ? parsed.href : fallback || "";
     } catch (_error) {
@@ -1848,6 +1848,10 @@
       "  \"unclearPoints\": [\"contradiction, ambiguity, or unclear point that should be resolved before acting\"],",
       "  \"unresolvedQuestions\": [\"question that must be answered before acting or delegating\"],",
       "  \"recommendations\": [\"practical recommendation\"],",
+      "  \"facts\": [\"claim directly stated in the supplied card data\"],",
+      "  \"inferences\": [\"interpretation that requires human review\"],",
+      "  \"uncertainty\": [\"information that could not be verified\"],",
+      "  \"unsupportedClaims\": [\"claim that must not be treated as fact\"],",
       "  \"evidenceClaims\": [{\"claim\":\"factual claim\",\"source\":\"title|description|comment|activity|checklist|label|member|due|attachment|custom-field\",\"confidence\":\"supported|uncertain\"}],",
       "  \"validationFindings\": [\"unsupported, conflicting, incomplete, or attachment-extraction issue\"],",
       "  \"confidence\": \"high|medium|low\",",
@@ -1961,6 +1965,10 @@
       unclearPoints: ensureList(source.unclearPoints || source.unclear_points || source.contradictions || source.conflicts, fallback.unclearPoints),
       unresolvedQuestions: ensureList(source.unresolvedQuestions || source.unresolved_questions, fallback.unresolvedQuestions),
       recommendations: ensureList(source.recommendations, fallback.recommendations),
+      facts: ensureList(source.facts, fallback.facts),
+      inferences: ensureList(source.inferences, fallback.inferences),
+      uncertainty: ensureList(source.uncertainty || source.uncertainties, fallback.uncertainty),
+      unsupportedClaims: ensureList(source.unsupportedClaims || source.unsupported_claims, fallback.unsupportedClaims),
       evidenceClaims: ensureEvidenceClaims(source.evidenceClaims || source.evidence_claims, fallback.evidenceClaims),
       validationFindings: ensureList(source.validationFindings || source.validation_findings, fallback.validationFindings),
       confidenceReason: ensureString(source.confidenceReason || source.confidence_reason, fallback.confidenceReason),
@@ -2078,6 +2086,12 @@
     } catch (error) {
       return "";
     }
+  }
+
+  function isAllowedLocalProxyUrl(parsed) {
+    if (!parsed || parsed.protocol !== "http:") return false;
+    var host = String(parsed.hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0:0:0:0:0:0:0:1";
   }
 
   function isPrivateOrLocalHostname(hostname) {

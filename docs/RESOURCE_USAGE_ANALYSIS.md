@@ -1,10 +1,12 @@
 # Resource Usage Analysis
 
-Date: 2026-07-01
+Date: 2026-08-08
 
 ## Summary
 
 The active Trello Power-Up is already lightweight because it is a static browser app. The biggest resource risk was not CPU or memory, but unbounded AI request size on very large cards and unnecessary static surface area in a Windows install. Both were reduced without removing user-facing features.
+
+The optional backend remains single-instance and dependency-free. Its worker runs inside the backend process, sleeps between bounded cycles, and makes no provider or Trello request. Worker reminder/event changes are committed in one store transaction per cycle, password hashing uses asynchronous scrypt, sessions and operational collections are bounded, and local backups retain the newest 20 snapshots.
 
 ## Measured Footprint
 
@@ -14,13 +16,14 @@ Measured with:
 npm run analyze:resources
 ```
 
-Current results:
+Current 2026-08-08 results:
 
-- Active popup initial local files: about 401.6 KB (`popup.html`, `attachment-processor.js`, `summarizer-core.js`, `card-intelligence-ledger.js`, `icon.svg`).
-- Windows installer runtime payload: about 577.1 KB.
-- Whole repository source footprint, excluding `.git` and `dist`: about 1.87 MB.
-- Generated Windows installer executable: 347,648 bytes.
-- Large-card AI prompt after caps: 19,446 characters.
+- Active popup initial local files: 439.4 KB.
+- Deferred attachment processor: 40.2 KB.
+- Windows installer runtime payload: 610.0 KB.
+- Whole repository source footprint, excluding `.git` and `dist`: 2.67 MB.
+- Generated Windows installer executable: 357,888 bytes.
+- Large-card AI prompt after caps: 19,701 characters.
 - Large-card prompt comments included: 12.
 - Longest included comment: 700 characters.
 - Included card description: 2,499 characters.
@@ -65,9 +68,10 @@ Current results:
    - Dutch local-fallback output uses static in-bundle copy only, adding no network calls, provider calls, storage writes, polling, or runtime translation dependency.
    - The Windows update checker is manual-only. It adds a small local manifest plus static comparison helpers, and performs no network call unless the user presses **Check for updates**.
 
-5. No always-on service:
+5. No always-on installed service:
    - The installed app starts only when the user launches it.
    - Closing the launcher window stops the local server.
+   - The optional backend worker runs only when the operator starts the backend with `RUN_WORKER=true`; it does not ship as a Windows background service.
 
 6. Lightweight ledger:
    - The card intelligence ledger runs in the popup only when an analysis is created.
@@ -108,7 +112,7 @@ Current results:
    - PDF, Word, image, audio, video, and arbitrary link attachments remain metadata-only in the active popup.
    - Legacy attachment processing also keeps PDF, Word, spreadsheet, and image attachments metadata-only by default unless a caller explicitly opts into binary fetching.
    - Custom prompt guidance is capped to 600 characters, saved prompt templates are capped to 10 member-private records, and ledger exports store only prompt/language metadata, not the full guidance text.
-   - Cost budget tracking stores only compact provider, model, token, cost, card id/title, run id, and timestamp records in member-private storage, capped to 200 records.
+   - Cost budget tracking stores compact provider, model, token, cost, card id/title, run id, and timestamp records only when a trusted integration explicitly supplies a cost value; records are capped to 200 in member-private storage. Direct-provider calls retain token usage but do not infer monetary cost from a bundled rate table.
    - Runtime timing metrics store only compact stage durations, provider/source, card id, run id, and timestamp in member-private storage, capped to 100 records.
    - Stale-activity detection reuses existing Trello activity/comment timestamps, adds no Trello reads, stores no extra card content, and produces compact blocker, validation, trust, and review-question records only when thresholds are met.
 
@@ -124,11 +128,11 @@ Low. The active popup loads a small static HTML page and three shared JS helpers
 
 ### Disk
 
-Low for installed users. The installer runtime payload is about 559.9 KB, and the generated `SummarizeThisSetup.exe` is 338,432 bytes because the payload is compressed into a self-extracting .NET Framework executable.
+Low for installed users. The installer runtime payload is 610.0 KB, and the generated `SummarizeThisSetup.exe` is 357,888 bytes because the payload is compressed into a self-extracting .NET Framework executable.
 
 ### Network
 
-Moderate only when AI is enabled and approved. The app sends Trello card context to the selected AI provider or configured backend proxy, but sensitive client, financial, legal, or personal signals now force a local result first until the user approves the handoff. The same sensitive signals also require review before detailed export copy/download or Trello comment draft handoff. Prior correction text is included only as bounded guidance and participates in sensitive-signal detection. The prompt and response caps reduce token use, latency, and provider cost for large cards. Reopening an unchanged card with the same analysis settings and AI connector state reuses the matching private ledger run instead of making another provider call; the Analyze again button still forces a fresh run. Optional consensus mode can call multiple configured providers, but it is off by default and records combined token/cost estimates when used. Optional text/CSV attachment extraction adds bounded HTTPS fetches only when enabled in settings, and sensitive cards skip those fetches until approval. Legacy attachment processing blocks private/local URLs, including normalized IPv4 forms and local/private IPv6 ranges, and no longer fetches binary attachment bodies by default. Per-provider monthly budget alerts now warn on estimated spend thresholds without adding any network calls. Runtime diagnostics now redact key-like strings, tokens, and URLs. In local-only mode no AI provider or proxy network request is made. The Windows update check is user-triggered only and uses a no-credentials fetch to the configured GitHub manifest.
+Moderate only when AI is enabled and approved. The app sends Trello card context to the selected AI provider or configured backend proxy, but sensitive client, financial, legal, or personal signals now force a local result first until the user approves the handoff. The same sensitive signals also require review before detailed export copy/download or Trello comment draft handoff. Prior correction text is included only as bounded guidance and participates in sensitive-signal detection. The prompt and response caps reduce token use, latency, and provider cost for large cards. Reopening an unchanged card with the same analysis settings and AI connector state reuses the matching private ledger run instead of making another provider call; the Analyze again button still forces a fresh run. Optional consensus mode can call multiple configured providers, but it is off by default and records combined token use; it records a monetary amount only when every contributing provider reports a trusted cost. Optional text/CSV attachment extraction adds bounded HTTPS fetches only when enabled in settings, and sensitive cards skip those fetches until approval. Legacy attachment processing blocks private/local URLs, including normalized IPv4 forms and local/private IPv6 ranges, and no longer fetches binary attachment bodies by default. Per-provider monthly budget alerts require an explicitly trusted run-cost value and otherwise remain inactive. Runtime diagnostics now redact key-like strings, tokens, and URLs. In local-only mode no AI provider or proxy network request is made. The Windows update check is user-triggered only and uses a no-credentials fetch to the configured GitHub manifest.
 
 Local preview does not persist provider API keys, so AI-only mode requires either the Trello Power-Up runtime where member-private storage is available or a valid backend proxy endpoint. Proxy endpoints are saved only after normalization: HTTPS is required for Trello use, localhost/127.0.0.1 are allowed for development, and query strings, fragments, and embedded credentials are stripped or rejected.
 
