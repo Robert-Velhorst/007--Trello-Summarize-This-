@@ -13,7 +13,7 @@ Run `SummarizeThisSetup.exe`, then use the Start menu shortcuts:
 - **Share Backend with ngrok** starts an explicit HTTPS tunnel after checking the backend. ngrok must already be installed and authorized.
 - **Uninstall Summarize This** stops the exact installed backend process and removes the per-user installation.
 
-The installed backend listens at `http://127.0.0.1:18787/api`; its generated secrets and local store stay under the current user's LocalAppData installation folder.
+The installed backend prefers `http://127.0.0.1:18787/api` and automatically selects a safe loopback fallback if another application owns that port. The launcher passes the selected port to the UI and ngrok. Generated secrets and the local store stay under the current user's LocalAppData installation folder.
 
 ### Prerequisites
 

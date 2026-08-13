@@ -2,6 +2,7 @@ param(
   [switch]$NoLaunch,
   [switch]$Setup,
   [switch]$BackendOnly,
+  [switch]$PrintBackendPort,
   [int]$Port = 17117
 )
 
@@ -41,8 +42,10 @@ foreach ($entry in $RuntimeFiles) {
 }
 
 function Test-SummarizeThisBackend {
+  param([int]$Port = $BackendPort)
+
   try {
-    $health = Invoke-RestMethod -TimeoutSec 1 "http://127.0.0.1:$BackendPort/api/health"
+    $health = Invoke-RestMethod -TimeoutSec 1 "http://127.0.0.1:$Port/api/health"
     return $health.status -eq "ok" -and $health.service -eq "summarize-this-backend"
   } catch {
     return $false
@@ -64,6 +67,7 @@ function Start-SummarizeThisBackend {
       $previous[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, "Process")
       [Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, "Process")
     }
+    [Environment]::SetEnvironmentVariable("API_PORT", [string]$BackendPort, "Process")
     $backendProcess = Start-Process -FilePath $BackendExecutable -WorkingDirectory $AppRoot -WindowStyle Hidden -PassThru
     Set-Content -LiteralPath $BackendPidPath -Value ([string]$backendProcess.Id) -Encoding ASCII
   } finally {
@@ -119,6 +123,37 @@ function Get-AvailablePort {
   }
 
   throw "No local port was available for Summarize This."
+}
+
+function Get-BackendPortCandidates {
+  $settingsPort = 18787
+  if (Test-Path -LiteralPath $BackendConfigPath -PathType Leaf) {
+    try {
+      $settings = Import-PowerShellDataFile -LiteralPath $BackendConfigPath
+      $parsedPort = 0
+      if ([int]::TryParse([string]$settings.API_PORT, [ref]$parsedPort) -and $parsedPort -ge 1024 -and $parsedPort -le 65535) {
+        $settingsPort = $parsedPort
+      }
+    } catch {
+    }
+  }
+
+  return @($settingsPort) + @(18787..18806) | Select-Object -Unique
+}
+
+function Resolve-BackendPort {
+  $candidates = @(Get-BackendPortCandidates)
+  foreach ($candidate in $candidates) {
+    if (Test-SummarizeThisBackend -Port $candidate) {
+      return [int]$candidate
+    }
+  }
+  foreach ($candidate in $candidates) {
+    if (Test-PortAvailable -Port $candidate) {
+      return [int]$candidate
+    }
+  }
+  throw "No loopback port was available for the Summarize This backend."
 }
 
 function Get-MimeType {
@@ -188,13 +223,17 @@ function Resolve-RequestPath {
   return $fullPath
 }
 
+$BackendPort = Resolve-BackendPort
 Start-SummarizeThisBackend
-if ($BackendOnly) { return }
+if ($BackendOnly) {
+  if ($PrintBackendPort) { Write-Output $BackendPort }
+  return
+}
 
 $portInfo = Get-AvailablePort
 $port = [int]$portInfo.Port
 $targetPage = if ($Setup) { "trello-setup.html" } else { "popup.html" }
-$url = "http://127.0.0.1:$port/$($targetPage)?installed=1"
+$url = "http://127.0.0.1:$port/$($targetPage)?installed=1&backendPort=$BackendPort"
 
 if ($portInfo.AlreadyRunning) {
   if (-not $NoLaunch) {

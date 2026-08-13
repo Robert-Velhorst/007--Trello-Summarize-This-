@@ -7,7 +7,7 @@
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
 
-> Version 1.1.0 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with a bundled loopback backend. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
+> Version 1.1.1 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with a collision-safe bundled loopback backend. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
 
 ---
 
@@ -104,7 +104,7 @@ The backend is part of the shipped product when persistence, batch job state, or
 ### Windows 11
 
 1. Download `SummarizeThisSetup.exe` from the current GitHub release or CI artifact.
-2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets.
+2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets. If that port belongs to another application, the launcher selects the next safe loopback port automatically and passes it to the UI and ngrok.
 3. Open **Summarize This** from the Start menu for the standalone local app.
 4. Open **Configure Trello Power-Up** to get the exact hosted connector URL.
 5. Open **Share Backend with ngrok** only when Trello or HAI needs to reach the local backend over HTTPS.
@@ -115,7 +115,7 @@ The installer does not require Node.js, Docker, or administrator rights. ngrok i
 
 GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
 
-`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260809.1`
+`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.1`
 
 ### 2. Register as Trello Power-Up (4 minutes)
 

@@ -26,9 +26,9 @@
       document.head.appendChild(script);
     });
   </script>
-  <script src="./trello-config.js?v=20260809.1"></script>
-  <script src="./summarizer-core.js?v=20260809.1"></script>
-  <script src="./card-intelligence-ledger.js?v=20260809.1"></script>
+  <script src="./trello-config.js?v=20260814.1"></script>
+  <script src="./summarizer-core.js?v=20260814.1"></script>
+  <script src="./card-intelligence-ledger.js?v=20260814.1"></script>
   <style>
     :root {
       color-scheme: light dark;
@@ -1188,6 +1188,11 @@
       );
       var pageParams = new URLSearchParams(window.location.search || "");
       var installedMode = pageParams.get("installed") === "1" || pageParams.get("localPreview") === "1";
+      var installedBackendPort = Number(pageParams.get("backendPort"));
+      if (!Number.isInteger(installedBackendPort) || installedBackendPort < 1024 || installedBackendPort > 65535) {
+        installedBackendPort = 18787;
+      }
+      var installedBackendApiBase = "http://127.0.0.1:" + installedBackendPort + "/api";
 
       var elements = {
         cardTitle: document.getElementById("cardTitle"),
@@ -1644,8 +1649,17 @@
 
       function normalizeBackendForRuntime(input, proxy) {
         var normalized = SummarizeThis.normalizeBackendSettings(input, proxy);
-        if (!normalized.valid && installedMode) {
-          return SummarizeThis.normalizeBackendSettings({ apiBase: "http://127.0.0.1:18787/api" });
+        var localInstalledBackend = false;
+        if (normalized.valid && installedMode) {
+          try {
+            var normalizedUrl = new URL(normalized.apiBase);
+            localInstalledBackend = normalizedUrl.protocol === "http:" &&
+              (normalizedUrl.hostname === "127.0.0.1" || normalizedUrl.hostname === "localhost" || normalizedUrl.hostname === "[::1]");
+          } catch (_error) {
+          }
+        }
+        if (installedMode && (!normalized.valid || localInstalledBackend)) {
+          return SummarizeThis.normalizeBackendSettings({ apiBase: installedBackendApiBase });
         }
         return normalized;
       }
@@ -1810,7 +1824,7 @@
         if (attachmentProcessorLoadPromise) return attachmentProcessorLoadPromise;
         attachmentProcessorLoadPromise = new Promise(function (resolve, reject) {
           var script = document.createElement("script");
-          script.src = "./attachment-processor.js?v=1.1.0";
+          script.src = "./attachment-processor.js?v=1.1.1";
           script.async = true;
           script.onload = function () {
             if (window.AttachmentProcessor) resolve(window.AttachmentProcessor);
@@ -5312,7 +5326,9 @@
             height: 620
           });
         } else {
-          window.location.href = "./settings-powerup.html" + (installedMode ? "?installed=1" : "");
+          window.location.href = "./settings-powerup.html" + (installedMode
+            ? "?installed=1&backendPort=" + encodeURIComponent(String(installedBackendPort))
+            : "");
         }
       }
 

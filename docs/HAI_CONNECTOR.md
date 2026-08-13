@@ -17,7 +17,7 @@ Set `HAI_CONNECTOR_ENABLED=true` for a server deployment. The Windows installer 
 
 In Power-Up settings:
 
-1. Set the backend API base. The Windows app uses `http://127.0.0.1:18787/api`.
+1. Set the backend API base. The Windows app prefers `http://127.0.0.1:18787/api`; when that port is occupied, its launcher selects a safe fallback and opens the UI with the effective API base.
 2. Create an account or sign in.
 3. Select **Generate or rotate URL**.
 4. Copy the URL once and store it as a secret.
