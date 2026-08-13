@@ -14,6 +14,7 @@ process.env.GOOGLE_API_KEY = "";
 process.env.PROXY_ENDPOINT = "";
 process.env.DATABASE_URL = "";
 process.env.HAI_CONNECTOR_ENABLED = "true";
+process.env.REGISTRATION_MODE = "open";
 
 const { createBackendApp } = require("./backend-app");
 const { DEFAULT_RUNTIME_STORE_PATH, LocalBackendStore } = require("./backend-storage");
@@ -92,6 +93,35 @@ async function main() {
   assert.equal(health.status, 200);
   assert.equal(health.data.status, "ok");
   assert.equal(health.data.storage.users, 0);
+  const singleUserApp = await createBackendApp({ filePath: path.join(storageDirectory, "single-user-store.json") });
+  process.env.REGISTRATION_MODE = "single-user";
+  const forwardedBootstrap = await requestJson(singleUserApp, "POST", "/api/auth/register", {
+    email: "forwarded-owner@test.example",
+    password: "forwarded-owner-password",
+    name: "Forwarded Owner"
+  }, { "X-Forwarded-For": "203.0.113.10" });
+  assert.equal(forwardedBootstrap.status, 403);
+  const localBootstrap = await requestJson(singleUserApp, "POST", "/api/auth/register", {
+    email: "local-owner@test.example",
+    password: "local-owner-password",
+    name: "Local Owner"
+  });
+  assert.equal(localBootstrap.status, 201);
+  const secondLocalRegistration = await requestJson(singleUserApp, "POST", "/api/auth/register", {
+    email: "second-owner@test.example",
+    password: "second-owner-password",
+    name: "Second Owner"
+  });
+  assert.equal(secondLocalRegistration.status, 403);
+  const concurrentSingleUserApp = await createBackendApp({ filePath: path.join(storageDirectory, "concurrent-single-user-store.json") });
+  const concurrentRegistrations = await Promise.all(["one", "two"].map((suffix) => requestJson(concurrentSingleUserApp, "POST", "/api/auth/register", {
+    email: `concurrent-${suffix}@test.example`,
+    password: `concurrent-${suffix}-password`,
+    name: `Concurrent ${suffix}`
+  })));
+  assert.deepEqual(concurrentRegistrations.map((response) => response.status).sort(), [201, 403]);
+  assert.equal((await concurrentSingleUserApp.store.listUsers()).length, 1);
+  process.env.REGISTRATION_MODE = "open";
   const concurrentEventIds = Array.from({ length: 8 }, (_item, index) => `concurrent-event-${index}`);
   await Promise.all(concurrentEventIds.map((id) => app.store.add("events", {
     id,
@@ -124,6 +154,11 @@ async function main() {
   assert.equal(invalidStoreReadiness.ok, false);
   assert.ok(invalidStoreReadiness.missing.some((item) => item.startsWith("BACKEND_STORE")));
   delete process.env.BACKEND_STORE;
+  process.env.REGISTRATION_MODE = "invalid";
+  const invalidRegistrationReadiness = backendConfig.backendReadiness();
+  assert.equal(invalidRegistrationReadiness.ok, false);
+  assert.ok(invalidRegistrationReadiness.missing.some((item) => item.startsWith("REGISTRATION_MODE")));
+  process.env.REGISTRATION_MODE = "open";
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(storageDirectory).mode & 0o077, 0);
     assert.equal(fs.statSync(filePath).mode & 0o077, 0);

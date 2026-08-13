@@ -7,7 +7,7 @@
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
 
-> Version 1.1.2 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with collision-safe ports and upgrade-safe ngrok domain configuration. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
+> Version 1.1.3 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with collision-safe ports, upgrade-safe ngrok configuration, and local-only single-user bootstrap. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
 
 ---
 
@@ -115,7 +115,7 @@ The installer does not require Node.js, Docker, or administrator rights. ngrok i
 
 GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
 
-`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.2`
+`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.3`
 
 ### 2. Register as Trello Power-Up (4 minutes)
 

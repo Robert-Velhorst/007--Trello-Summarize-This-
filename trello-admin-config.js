@@ -8,7 +8,7 @@
 }(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  var CONNECTOR_BUILD_ID = "20260814.2";
+  var CONNECTOR_BUILD_ID = "20260814.3";
 
   var DEFAULT_MANIFEST = {
     name: "Summarize This",

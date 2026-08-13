@@ -59,6 +59,8 @@ POST /api/auth/login    { email, password }        → 200 { success, user, toke
 
 Authentication and registration attempts are throttled by both normalized email and direct socket client address before password verification. A throttled request returns `429` with `retryAfterSeconds`; the local limits are documented in `docs/RATE_LIMIT_POLICY.md`.
 
+Registration is additionally governed by `REGISTRATION_MODE`. The default `closed` mode rejects registration. Windows uses `single-user`, which rejects forwarded/public registration and disables registration after the first local owner exists. Multi-user deployments must deliberately set `open`.
+
 Registration requires a valid email address. Admin user updates reject malformed email addresses (`400`) and duplicate addresses (`409`).
 Registration passwords contain 12-256 characters and are hashed with asynchronous scrypt. Login performs equivalent password work for unknown users to reduce timing-based identity discovery.
 User roles are not editable through the admin user-update route (`422`); admin authority comes only from the separate admin session login.

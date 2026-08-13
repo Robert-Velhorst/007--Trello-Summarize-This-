@@ -292,7 +292,7 @@
       instruction: "Write all user-facing summary values in Dutch."
     }
   };
-  var APP_VERSION = "1.1.2";
+  var APP_VERSION = "1.1.3";
   var DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json";
   var UPDATE_REPO_URL_PREFIX = "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-";
 

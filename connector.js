@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var BUILD_ID = "20260814.2";
+  var BUILD_ID = "20260814.3";
   var POPUP_URL = "./popup.html?v=" + BUILD_ID;
   var SETTINGS_URL = "./settings-powerup.html?v=" + BUILD_ID;
   var ICON_URL = "./icon.svg?v=" + BUILD_ID;

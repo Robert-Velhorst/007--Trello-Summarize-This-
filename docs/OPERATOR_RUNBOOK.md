@@ -54,6 +54,7 @@ npm run start:backend
 |---|---|---|
 | `JWT_SECRET` | Yes | Secret used to key opaque session-token hashes (minimum 32 characters; retained name for compatibility) |
 | `ADMIN_PASSWORD` | Yes | Local admin panel password (minimum 12 characters) |
+| `REGISTRATION_MODE` | Recommended | `closed` (default), `single-user`, or explicit `open` for intended multi-user deployments |
 | `TRELLO_APP_KEY` | Recommended | Trello Power-Up app key for comment/auth routes |
 | `OPENAI_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |
 | `ANTHROPIC_API_KEY` | Optional | Used by the browser Power-Up direct-provider flow; the local backend does not execute provider calls |

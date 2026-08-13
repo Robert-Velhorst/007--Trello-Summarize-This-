@@ -1,10 +1,10 @@
 {
   "schemaVersion": "summarize-this-update-manifest-v1",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "releaseDate": "2026-08-14",
   "minimumSupportedVersion": "1.0.0",
   "releaseNotesUrl": "https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/releases",
   "downloadUrl": "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/dist/windows-installer/SummarizeThisSetup.exe",
   "manifestUrl": "https://raw.githubusercontent.com/Robert-Velhorst/007--Trello-Summarize-This-/main/update.json",
-  "message": "Windows users can now validate and save a dedicated ngrok HTTPS domain that survives installer upgrades. Manual update checks and installation remain user-triggered."
+  "message": "Public Windows tunnels now require a local owner account, and single-user registration rejects forwarded requests and later accounts. Manual updates remain user-triggered."
 }

@@ -284,6 +284,12 @@ function clientAddress(req) {
   return String(address || "unknown-client").trim().slice(0, 128) || "unknown-client";
 }
 
+function hasForwardingHeaders(req) {
+  const headers = (req && req.headers) || {};
+  return ["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto"]
+    .some((name) => Boolean(String(headers[name] || "").trim()));
+}
+
 async function withIdempotency(req, store, scope, handler) {
   const key = idempotencyKey(req);
   if (!key) return handler();
@@ -563,6 +569,20 @@ async function route(req, res, store, adminPasswordRecord) {
   }
 
   if (req.method === "POST" && pathname === "/api/auth/register") {
+    if (config.REGISTRATION_MODE === "closed") {
+      json(res, 403, { success: false, error: "Account registration is closed on this backend" });
+      return;
+    }
+    if (config.REGISTRATION_MODE === "single-user") {
+      if (hasForwardingHeaders(req)) {
+        json(res, 403, { success: false, error: "Create the owner account from the installed app on the host computer before opening a public tunnel" });
+        return;
+      }
+      if ((await store.listUsers()).length > 0) {
+        json(res, 403, { success: false, error: "This backend already has its owner account; additional registration is disabled" });
+        return;
+      }
+    }
     const body = await readBody(req);
     const missing = requireFields(body, ["email", "password", "name"]);
     if (missing) {
@@ -594,7 +614,10 @@ async function route(req, res, store, adminPasswordRecord) {
       return;
     }
     const passwordRecord = await scryptRecord(body.password);
-    const user = await store.createUser({
+    const createUser = config.REGISTRATION_MODE === "single-user"
+      ? store.createFirstUser.bind(store)
+      : store.createUser.bind(store);
+    const user = await createUser({
       email,
       name: String(body.name).trim().slice(0, 120),
       passwordHash: passwordRecord.hash,

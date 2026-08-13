@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3 - 2026-08-14
+
+- Default backend registration to closed unless a deployment explicitly selects another mode.
+- Make Windows registration single-user and local-host-only for the first owner account.
+- Refuse to open the standard Windows ngrok tunnel before the local owner exists.
+
 ## 1.1.2 - 2026-08-14
 
 - Add a Start Menu workflow for validating and saving a dedicated ngrok HTTPS domain.

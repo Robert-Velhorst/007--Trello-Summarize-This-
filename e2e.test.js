@@ -8,6 +8,7 @@ const path = require("node:path");
 process.env.JWT_SECRET = "e2e-session-secret-that-is-at-least-32-chars";
 process.env.ADMIN_PASSWORD = "e2e-admin-password";
 process.env.ADMIN_EMAIL = "admin@example.test";
+process.env.REGISTRATION_MODE = "open";
 
 const { startBackendServer } = require("./backend-server");
 const { processWorkerCycle } = require("./backend-worker");

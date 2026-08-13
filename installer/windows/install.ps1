@@ -144,6 +144,7 @@ if (-not (Test-Path -LiteralPath $BackendSettingsPath -PathType Leaf)) {
     JWT_SECRET = (New-PrivateRandomText -Bytes 48)
     ADMIN_EMAIL = "local-admin@summarize-this.invalid"
     ADMIN_PASSWORD = (New-PrivateRandomText -Bytes 32)
+    REGISTRATION_MODE = "single-user"
     TRELLO_APP_KEY = "710f51778ec3e0eff7be947779695aed"
     TRELLO_APP_NAME = "Summarize This"
     BACKEND_ALLOWED_ORIGINS = ((@($localOrigins) + "https://robert-velhorst.github.io") -join ",")
@@ -156,6 +157,18 @@ if (-not (Test-Path -LiteralPath $BackendSettingsPath -PathType Leaf)) {
   }
   $lines += "}"
   Set-Content -LiteralPath $BackendSettingsPath -Value $lines -Encoding UTF8
+} else {
+  $settings = Import-PowerShellDataFile -LiteralPath $BackendSettingsPath
+  if (-not $settings.ContainsKey("REGISTRATION_MODE")) {
+    $settings.REGISTRATION_MODE = "single-user"
+    $lines = @("@{")
+    foreach ($entry in $settings.GetEnumerator()) {
+      $safeValue = ([string]$entry.Value).Replace("'", "''")
+      $lines += "  $($entry.Key) = '$safeValue'"
+    }
+    $lines += "}"
+    Set-Content -LiteralPath $BackendSettingsPath -Value $lines -Encoding UTF8
+  }
 }
 Protect-CurrentUserFile -Path $BackendSettingsPath
 
