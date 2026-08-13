@@ -8,7 +8,7 @@ Date: 2026-08-09
 - API keys (OpenAI, Anthropic, Google) are stored in browser member-private Trello storage only. They are never logged or transmitted to the Trello server.
 - Proxy endpoint credentials are configured separately from browser-held keys.
 - Backend session-hash secret (`JWT_SECRET`, retained environment-variable name; minimum 32 characters) and admin password (minimum 12 characters) must be provided as environment variables — never hardcoded.
-- The backend creates no default end-user account or predictable bootstrap password. Users must register explicitly; tests use disposable, isolated accounts.
+- The backend creates no default end-user account or predictable bootstrap password. Registration defaults to closed. Windows uses single-user mode, accepts its first owner only from the host, and refuses to open its standard tunnel before that owner exists.
 - Account emails are normalized and validated at registration and admin edit time; duplicate identities are rejected.
 - Registration passwords are bounded to 12-256 characters and processed with asynchronous scrypt. Unknown-user login performs equivalent scrypt work, and admin credential comparisons use timing-safe digests.
 - User data exports exclude password hashes, password salts, and sessions. Account deletion cascades owner-scoped data.
@@ -57,6 +57,7 @@ The backend API (`backend-app.js`) now sends:
 - Idempotency on summary, batch creation, backup creation, and credit mutations
 - Bounded sessions, events, jobs, notifications, rate windows, and backup retention
 - Per-user HAI capability URLs with HMAC-only token storage, immediate rotation/revocation, owner filtering, and explicit summary approval
+- Fail-closed registration modes (`closed`, `single-user`, `open`), including forwarded-request rejection for the Windows single-user bootstrap
 - Non-root Docker execution, dropped Linux capabilities, `no-new-privileges`, loopback Compose binding, and no embedded secrets
 
 ## Known Security Gaps (Not Production-Safe)

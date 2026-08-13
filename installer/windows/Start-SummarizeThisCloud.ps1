@@ -65,6 +65,10 @@ $BackendPort = 0
 if (-not [int]::TryParse(([string]($backendPortOutput | Select-Object -Last 1)).Trim(), [ref]$BackendPort) -or $BackendPort -lt 1024 -or $BackendPort -gt 65535) {
   throw "The local backend did not report a valid loopback port."
 }
+$backendHealth = Invoke-RestMethod -TimeoutSec 3 "http://127.0.0.1:$BackendPort/api/health"
+if ($backendHealth.status -ne "ok" -or [int]$backendHealth.storage.users -lt 1) {
+  throw "Create the local owner account in Summarize This settings before opening a public tunnel."
+}
 
 $Ngrok = Get-Command ngrok.exe -ErrorAction SilentlyContinue
 if (-not $Ngrok) {

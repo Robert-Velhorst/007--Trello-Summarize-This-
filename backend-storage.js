@@ -202,6 +202,42 @@ class LocalBackendStore {
     return clone(user);
   }
 
+  async createFirstUser(record) {
+    return this.transaction((state) => {
+      if (state.users.length > 0) {
+        const error = new Error("This backend already has its owner account; additional registration is disabled");
+        error.statusCode = 403;
+        throw error;
+      }
+      const user = Object.assign({
+        id: createId("user"),
+        credits: 10,
+        role: "user",
+        suspended: false,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      }, record);
+      user.workspaceId = user.workspaceId || workspaceIdForUser(user.id);
+      state.users.push(user);
+      state.workspaces.push({
+        id: user.workspaceId,
+        name: `${user.name || user.email || "User"} workspace`,
+        ownerUserId: user.id,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      });
+      state.memberships.push({
+        id: createId("membership"),
+        workspaceId: user.workspaceId,
+        userId: user.id,
+        role: "owner",
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      });
+      return user;
+    });
+  }
+
   async updateUser(id, updates) {
     const user = this.state.users.find((item) => item.id === id);
     if (!user) return null;

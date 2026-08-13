@@ -16,6 +16,7 @@ function env() {
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || "",
     ADMIN_EMAIL: process.env.ADMIN_EMAIL || "admin@example.com",
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "",
+    REGISTRATION_MODE: String(process.env.REGISTRATION_MODE || "closed").trim().toLowerCase(),
     TRELLO_APP_KEY: process.env.TRELLO_APP_KEY || "",
     TRELLO_APP_NAME: process.env.TRELLO_APP_NAME || "Summarize This",
     PROXY_ENDPOINT: process.env.PROXY_ENDPOINT || "",
@@ -54,6 +55,9 @@ function missingEnvForBackend() {
   if (current.BACKEND_STORE === "postgres" && !String(current.DATABASE_URL).trim()) {
     missing.push("DATABASE_URL (required when BACKEND_STORE=postgres)");
   }
+  if (!["closed", "single-user", "open"].includes(current.REGISTRATION_MODE)) {
+    missing.push("REGISTRATION_MODE (must be closed, single-user, or open)");
+  }
   return missing;
 }
 
@@ -89,6 +93,7 @@ function publicConfig() {
     port: current.PORT,
     version: require("./package.json").version,
     storage: current.BACKEND_STORE || (current.DATABASE_URL ? "postgres" : "local"),
+    registrationMode: current.REGISTRATION_MODE,
     trello: {
       appKeyConfigured: Boolean(current.TRELLO_APP_KEY),
       appName: current.TRELLO_APP_NAME
@@ -125,6 +130,9 @@ const exported = {
   },
   get ADMIN_PASSWORD() {
     return env().ADMIN_PASSWORD;
+  },
+  get REGISTRATION_MODE() {
+    return env().REGISTRATION_MODE;
   },
   get TRELLO_APP_KEY() {
     return env().TRELLO_APP_KEY;

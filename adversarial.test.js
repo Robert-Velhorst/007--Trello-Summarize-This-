@@ -17,6 +17,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const { PassThrough } = require("node:stream");
+process.env.REGISTRATION_MODE = "open";
 const { createBackendApp } = require("./backend-app");
 const FakeProvider = require("./fake-provider");
 const SummarizeThis = require("./summarizer-core");

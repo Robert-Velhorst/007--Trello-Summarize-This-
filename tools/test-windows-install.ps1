@@ -96,17 +96,42 @@ try {
     name = "Upgrade Test"
   } | ConvertTo-Json) -TimeoutSec 5
   if (-not $registration.token) { throw "Installed backend did not create the upgrade persistence account." }
+  try {
+    $unexpectedRegistration = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:$BackendPort/api/auth/register" -Body (@{
+      email = "second-owner@example.invalid"
+      password = "second-owner-password"
+      name = "Second Owner"
+    } | ConvertTo-Json) -TimeoutSec 5
+    throw "Single-user Windows backend accepted a second registration."
+  } catch {
+    $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+    if ($statusCode -ne 403) { throw }
+  }
 
-  $settingsBeforeUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1") -Raw
+  $backendSettingsPath = Join-Path $InstallRoot "backend-settings.psd1"
+  $settingsBeforeUpgrade = Import-PowerShellDataFile -LiteralPath $backendSettingsPath
+  [void]$settingsBeforeUpgrade.Remove("REGISTRATION_MODE")
+  $legacyLines = @("@{")
+  foreach ($entry in $settingsBeforeUpgrade.GetEnumerator()) {
+    $safeValue = ([string]$entry.Value).Replace("'", "''")
+    $legacyLines += "  $($entry.Key) = '$safeValue'"
+  }
+  $legacyLines += "}"
+  Set-Content -LiteralPath $backendSettingsPath -Value $legacyLines -Encoding UTF8
   $oldBackendPid = [int](Get-Content -LiteralPath (Join-Path $InstallRoot "backend.pid") -Raw)
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Payload "install.ps1") -NoLaunch
   if ($LASTEXITCODE -ne 0) { throw "Upgrade installer payload returned exit code $LASTEXITCODE." }
   if (Get-Process -Id $oldBackendPid -ErrorAction SilentlyContinue) {
     throw "Upgrade installer did not stop the exact installed backend process."
   }
-  $settingsAfterUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1") -Raw
-  if ($settingsAfterUpgrade -ne $settingsBeforeUpgrade) {
-    throw "Upgrade installer replaced the existing private backend settings."
+  $settingsAfterUpgrade = Import-PowerShellDataFile -LiteralPath $backendSettingsPath
+  if ($settingsAfterUpgrade.REGISTRATION_MODE -ne "single-user") {
+    throw "Upgrade installer did not migrate the Windows registration policy."
+  }
+  foreach ($entry in $settingsBeforeUpgrade.GetEnumerator()) {
+    if ([string]$settingsAfterUpgrade[$entry.Key] -ne [string]$entry.Value) {
+      throw "Upgrade installer changed the existing backend setting $($entry.Key)."
+    }
   }
   $ngrokSettingsAfterUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "ngrok-settings.psd1") -Raw
   if ($ngrokSettingsAfterUpgrade -ne $ngrokSettingsBeforeUpgrade) {
