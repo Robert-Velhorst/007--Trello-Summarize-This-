@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 - 2026-08-14
+
+- Add a Start Menu workflow for validating and saving a dedicated ngrok HTTPS domain.
+- Reuse the saved domain for future tunnels and preserve it during installer upgrades.
+- Warn clearly before falling back to the ngrok account's default development domain.
+
 ## 1.1.1 - 2026-08-14
 
 - Let the Windows launcher select a safe loopback backend port when the preferred port is already used by another application.

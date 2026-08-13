@@ -7,7 +7,7 @@
 
 > Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
 
-> Version 1.1.1 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with a collision-safe bundled loopback backend. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
+> Version 1.1.2 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with collision-safe ports and upgrade-safe ngrok domain configuration. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
 
 ---
 
@@ -107,7 +107,7 @@ The backend is part of the shipped product when persistence, batch job state, or
 2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets. If that port belongs to another application, the launcher selects the next safe loopback port automatically and passes it to the UI and ngrok.
 3. Open **Summarize This** from the Start menu for the standalone local app.
 4. Open **Configure Trello Power-Up** to get the exact hosted connector URL.
-5. Open **Share Backend with ngrok** only when Trello or HAI needs to reach the local backend over HTTPS.
+5. For a reserved ngrok domain, open **Configure ngrok domain** once and enter its HTTPS URL. Then open **Share Backend with ngrok** only while Trello or HAI needs to reach the local backend.
 
 The installer does not require Node.js, Docker, or administrator rights. ngrok is optional and is not started automatically.
 
@@ -115,7 +115,7 @@ The installer does not require Node.js, Docker, or administrator rights. ngrok i
 
 GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
 
-`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.1`
+`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.2`
 
 ### 2. Register as Trello Power-Up (4 minutes)
 
