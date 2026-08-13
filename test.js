@@ -81,13 +81,18 @@ const installerBuildText = fs.readFileSync(path.join(__dirname, "installer/windo
 const installerInstallText = fs.readFileSync(path.join(__dirname, "installer/windows/install.ps1"), "utf8");
 assert.match(installerBuildText, /runtime-files\.json/);
 assert.match(installerInstallText, /runtime-files\.json/);
-["Start-SummarizeThis.ps1", "uninstall.ps1"].forEach((fileName) => {
+["Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "uninstall.ps1"].forEach((fileName) => {
   assert.match(installerInstallText, new RegExp(fileName.replace(".", "\\.")), `Windows installer copies helper script ${fileName}`);
 });
 const launcherScriptText = fs.readFileSync(path.join(__dirname, "installer/windows/Start-SummarizeThis.ps1"), "utf8");
 assert.match(launcherScriptText, /\[int\]\$Port\s*=\s*17117/, "Windows launcher supports an explicit QA port while preserving the installed default");
 assert.match(launcherScriptText, /RepoRootCandidate/, "Windows launcher can resolve the repository root when run from installer/windows");
 assert.match(launcherScriptText, /Join-Path \$RepoRootCandidate "popup\.html"/, "Windows launcher serves repo static files during local development");
+const cloudLauncherScriptText = fs.readFileSync(path.join(__dirname, "installer/windows/Start-SummarizeThisCloud.ps1"), "utf8");
+assert.match(cloudLauncherScriptText, /ngrok-settings\.psd1/);
+assert.match(cloudLauncherScriptText, /Resolve-NgrokPublicUrl/);
+assert.match(cloudLauncherScriptText, /--url=\$ConfiguredPublicUrl/);
+assert.match(installerInstallText, /Configure ngrok domain\.lnk/);
 const updateManifest = JSON.parse(fs.readFileSync(path.join(__dirname, "update.json"), "utf8"));
 assert.equal(updateManifest.schemaVersion, "summarize-this-update-manifest-v1");
 assert.equal(updateManifest.version, require("./package.json").version, "package and update manifest versions stay aligned");
@@ -1619,7 +1624,7 @@ const adminConfig = TrelloAdminConfig.createAdminConfig({
   icon: { url: "./icon.svg" },
   capabilities: ["card-buttons", "show-settings"]
 }, "https://powerup.example.com/app/");
-assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260814.1");
+assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260814.2");
 assert.equal(adminConfig.manifestUrl, "https://powerup.example.com/app/manifest.json");
 assert.equal(adminConfig.iconUrl, "https://powerup.example.com/app/icon.svg");
 assert.equal(adminConfig.privacyUrl, "https://powerup.example.com/app/privacy.html");
@@ -1627,7 +1632,7 @@ assert.equal(adminConfig.termsUrl, "https://powerup.example.com/app/terms.html")
 assert.deepEqual(adminConfig.capabilities, ["card-buttons", "show-settings"]);
 
 const adminValuesText = TrelloAdminConfig.makeAdminValuesText(adminConfig);
-assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260814.1"));
+assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260814.2"));
 assert.ok(adminValuesText.includes("Manifest URL: https://powerup.example.com/app/manifest.json"));
 assert.ok(adminValuesText.includes("Privacy policy URL: https://powerup.example.com/app/privacy.html"));
 assert.ok(adminValuesText.includes("Terms of service URL: https://powerup.example.com/app/terms.html"));
@@ -1698,7 +1703,7 @@ assert.equal(JSON.stringify(adminSetupPackage).includes("support@example.com"), 
 assert.doesNotMatch(JSON.stringify(adminSetupPackage), /sk-[a-z0-9]/i);
 
 const adminAutofillScript = TrelloAdminConfig.createAdminAutofillScript(adminConfig);
-assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260814.1"));
+assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260814.2"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/manifest.json"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/privacy.html"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/terms.html"));

@@ -10,6 +10,7 @@ Run `SummarizeThisSetup.exe`, then use the Start menu shortcuts:
 
 - **Summarize This** starts the bundled backend and local UI.
 - **Configure Trello Power-Up** opens the setup assistant.
+- **Configure ngrok domain** validates and saves a reserved HTTPS domain for future tunnels.
 - **Share Backend with ngrok** starts an explicit HTTPS tunnel after checking the backend. ngrok must already be installed and authorized.
 - **Uninstall Summarize This** stops the exact installed backend process and removes the per-user installation.
 

@@ -181,11 +181,13 @@ $launchArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$launchScript`""
 $setupArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$launchScript`" -Setup"
 $cloudScript = Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1"
 $cloudArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$cloudScript`""
+$cloudConfigArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$cloudScript`" -Configure"
 $uninstallScript = Join-Path $InstallRoot "uninstall.ps1"
 $uninstallArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$uninstallScript`""
 
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Summarize This.lnk") -Target $PowerShellPath -Arguments $launchArgs -WorkingDirectory $InstallRoot
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Configure Trello Power-Up.lnk") -Target $PowerShellPath -Arguments $setupArgs -WorkingDirectory $InstallRoot
+New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Configure ngrok domain.lnk") -Target $PowerShellPath -Arguments $cloudConfigArgs -WorkingDirectory $InstallRoot
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Share Backend with ngrok.lnk") -Target $PowerShellPath -Arguments $cloudArgs -WorkingDirectory $InstallRoot
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Uninstall Summarize This.lnk") -Target $PowerShellPath -Arguments $uninstallArgs -WorkingDirectory $InstallRoot
 

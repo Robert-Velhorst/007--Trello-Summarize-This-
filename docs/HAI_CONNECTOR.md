@@ -29,7 +29,7 @@ Create an owner-scoped HAI connected source with connector key `json-feed` and u
 
 For a Windows host reached through ngrok:
 
-1. Start **Share Backend with ngrok** from the Summarize This Start menu folder.
+1. Open **Configure ngrok domain** once and save the reserved HTTPS domain, then start **Share Backend with ngrok** from the Summarize This Start menu folder.
 2. Use the ngrok HTTPS hostname in the Power-Up backend API base, followed by `/api`.
 3. Generate a new HAI connector URL so it uses that HTTPS hostname.
 4. Add only the ngrok hostname to HAI's `CONNECTED_SOURCE_HTTP_ALLOWED_HOSTS` setting.

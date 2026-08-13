@@ -59,6 +59,15 @@ try {
   $dataAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "data")
   Assert-CurrentUserOnlyAcl -Acl $dataAcl -Label "The installed private data directory"
 
+  $testNgrokUrl = "https://summarize-this-test.ngrok.app"
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1") -ConfigureUrl $testNgrokUrl
+  if ($LASTEXITCODE -ne 0) { throw "The ngrok domain configuration helper returned exit code $LASTEXITCODE." }
+  $configuredNgrokUrl = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1") -PrintConfiguredUrl
+  if (([string]$configuredNgrokUrl).Trim() -ne $testNgrokUrl) { throw "The ngrok domain configuration was not resolved exactly." }
+  $ngrokSettingsBeforeUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "ngrok-settings.psd1") -Raw
+  $cloudShortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Summarize This\Configure ngrok domain.lnk"
+  if (-not (Test-Path -LiteralPath $cloudShortcut -PathType Leaf)) { throw "The ngrok domain configuration shortcut is missing." }
+
   try {
     $CollisionListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 18787)
     $CollisionListener.Start()
@@ -99,6 +108,10 @@ try {
   if ($settingsAfterUpgrade -ne $settingsBeforeUpgrade) {
     throw "Upgrade installer replaced the existing private backend settings."
   }
+  $ngrokSettingsAfterUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "ngrok-settings.psd1") -Raw
+  if ($ngrokSettingsAfterUpgrade -ne $ngrokSettingsBeforeUpgrade) {
+    throw "Upgrade installer replaced the configured ngrok domain."
+  }
 
   $backendPortOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch -PrintBackendPort
   if ($LASTEXITCODE -ne 0) { throw "Upgraded backend launcher returned exit code $LASTEXITCODE." }
@@ -134,7 +147,7 @@ try {
   if (-not $staticHealthy) { throw "Installed static launcher did not become healthy." }
   $popupResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/popup.html?installed=1&backendPort=$BackendPort" -TimeoutSec 3
   if ($popupResponse.StatusCode -ne 200) { throw "Installed popup was not served." }
-  foreach ($privatePath in @("backend-settings.psd1", "SummarizeThisBackend.exe", "backend.pid", "data/local-backend-store.json", "Start-SummarizeThis.ps1")) {
+  foreach ($privatePath in @("backend-settings.psd1", "ngrok-settings.psd1", "SummarizeThisBackend.exe", "backend.pid", "data/local-backend-store.json", "Start-SummarizeThis.ps1")) {
     try {
       $unexpected = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/$privatePath" -TimeoutSec 3
       throw "Private installer file $privatePath was served with HTTP $($unexpected.StatusCode)."
@@ -159,6 +172,7 @@ try {
     InstalledBackend = $health.status
     SelectedBackendPort = $BackendPort
     DefaultPortCollisionHandled = ($BackendPort -ne 18787)
+    CloudDomainPreserved = ($ngrokSettingsAfterUpgrade -eq $ngrokSettingsBeforeUpgrade)
     Storage = $health.storage.kind
     PrivateSettingsAcl = $settingsAcl.AreAccessRulesProtected
     PrivateDataAcl = $dataAcl.AreAccessRulesProtected
