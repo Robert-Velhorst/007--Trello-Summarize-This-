@@ -13,6 +13,8 @@ $OldLocalAppData = $env:LOCALAPPDATA
 $OldAppData = $env:APPDATA
 $InstallRoot = Join-Path $TestRoot "Local\SummarizeThis"
 $LauncherProcess = $null
+$CollisionListener = $null
+$BackendPort = 0
 
 function Assert-CurrentUserOnlyAcl {
   param(
@@ -57,16 +59,29 @@ try {
   $dataAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "data")
   Assert-CurrentUserOnlyAcl -Acl $dataAcl -Label "The installed private data directory"
 
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch
+  try {
+    $CollisionListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 18787)
+    $CollisionListener.Start()
+  } catch {
+    $CollisionListener = $null
+  }
+
+  $backendPortOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch -PrintBackendPort
   if ($LASTEXITCODE -ne 0) { throw "Installed backend launcher returned exit code $LASTEXITCODE." }
-  $health = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/health" -TimeoutSec 3
+  if (-not [int]::TryParse(([string]($backendPortOutput | Select-Object -Last 1)).Trim(), [ref]$BackendPort)) {
+    throw "Installed backend launcher did not report its port."
+  }
+  if ($CollisionListener -and $BackendPort -eq 18787) {
+    throw "Installed backend did not avoid the occupied default port."
+  }
+  $health = Invoke-RestMethod -Uri "http://127.0.0.1:$BackendPort/api/health" -TimeoutSec 3
   if ($health.status -ne "ok" -or $health.storage.kind -ne "local") {
     throw "Installed backend health or storage status is invalid."
   }
 
   $testEmail = "upgrade-test@example.invalid"
   $testPassword = "upgrade-test-password"
-  $registration = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:18787/api/auth/register" -Body (@{
+  $registration = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:$BackendPort/api/auth/register" -Body (@{
     email = $testEmail
     password = $testPassword
     name = "Upgrade Test"
@@ -85,9 +100,12 @@ try {
     throw "Upgrade installer replaced the existing private backend settings."
   }
 
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch
+  $backendPortOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch -PrintBackendPort
   if ($LASTEXITCODE -ne 0) { throw "Upgraded backend launcher returned exit code $LASTEXITCODE." }
-  $signIn = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:18787/api/auth/login" -Body (@{
+  if (-not [int]::TryParse(([string]($backendPortOutput | Select-Object -Last 1)).Trim(), [ref]$BackendPort)) {
+    throw "Upgraded backend launcher did not report its port."
+  }
+  $signIn = Invoke-RestMethod -Method Post -ContentType "application/json" -Uri "http://127.0.0.1:$BackendPort/api/auth/login" -Body (@{
     email = $testEmail
     password = $testPassword
   } | ConvertTo-Json) -TimeoutSec 5
@@ -114,7 +132,7 @@ try {
     }
   }
   if (-not $staticHealthy) { throw "Installed static launcher did not become healthy." }
-  $popupResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/popup.html?installed=1" -TimeoutSec 3
+  $popupResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$staticPort/popup.html?installed=1&backendPort=$BackendPort" -TimeoutSec 3
   if ($popupResponse.StatusCode -ne 200) { throw "Installed popup was not served." }
   foreach ($privatePath in @("backend-settings.psd1", "SummarizeThisBackend.exe", "backend.pid", "data/local-backend-store.json", "Start-SummarizeThis.ps1")) {
     try {
@@ -139,6 +157,8 @@ try {
 
   [pscustomobject]@{
     InstalledBackend = $health.status
+    SelectedBackendPort = $BackendPort
+    DefaultPortCollisionHandled = ($BackendPort -ne 18787)
     Storage = $health.storage.kind
     PrivateSettingsAcl = $settingsAcl.AreAccessRulesProtected
     PrivateDataAcl = $dataAcl.AreAccessRulesProtected
@@ -147,6 +167,7 @@ try {
     Uninstalled = $true
   }
 } finally {
+  if ($CollisionListener) { $CollisionListener.Stop() }
   if ($LauncherProcess -and -not $LauncherProcess.HasExited) {
     Stop-Process -Id $LauncherProcess.Id -Force
   }

@@ -583,7 +583,7 @@
     </div>
   </div>
 
-  <script src="./summarizer-core.js?v=20260809.1"></script>
+  <script src="./summarizer-core.js?v=20260814.1"></script>
   <script>
     /* global TrelloPowerUp, SummarizeThis */
 
@@ -599,6 +599,11 @@
       var t = inTrello ? window.TrelloPowerUp.iframe() : null;
       var pageParams = new URLSearchParams(window.location.search || "");
       var installedMode = pageParams.get("installed") === "1" || pageParams.get("localPreview") === "1";
+      var installedBackendPort = Number(pageParams.get("backendPort"));
+      if (!Number.isInteger(installedBackendPort) || installedBackendPort < 1024 || installedBackendPort > 65535) {
+        installedBackendPort = 18787;
+      }
+      var installedBackendApiBase = "http://127.0.0.1:" + installedBackendPort + "/api";
       
       var promptTemplates = [];
       var fields = {
@@ -709,9 +714,18 @@
         fields.useProxy.checked = proxySettings.enabled;
         fields.proxyEndpoint.value = proxySettings.endpoint;
         var backendSettings = SummarizeThis.normalizeBackendSettings(settings.backend, settings.proxy);
+        var localInstalledBackend = false;
+        if (backendSettings.valid && installedMode) {
+          try {
+            var backendUrl = new URL(backendSettings.apiBase);
+            localInstalledBackend = backendUrl.protocol === "http:" &&
+              (backendUrl.hostname === "127.0.0.1" || backendUrl.hostname === "localhost" || backendUrl.hostname === "[::1]");
+          } catch (_error) {
+          }
+        }
         fields.backendApiBase.value = backendSettings.derivedFromProxy
           ? ""
-          : (backendSettings.apiBase || (installedMode ? "http://127.0.0.1:18787/api" : ""));
+          : (localInstalledBackend ? installedBackendApiBase : (backendSettings.apiBase || (installedMode ? installedBackendApiBase : "")));
         fields.backendSessionToken.value = await readBackendSessionToken();
         fields.backendStatus.textContent = fields.backendSessionToken.value ? "A backend session is saved." : "Not signed in.";
         var budget = SummarizeThis.normalizeBudgetSettings(settings.budget);

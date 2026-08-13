@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 - 2026-08-14
+
+- Let the Windows launcher select a safe loopback backend port when the preferred port is already used by another application.
+- Pass the selected backend port through the desktop and cloud launchers so the UI and ngrok tunnel stay aligned.
+- Extend Windows acceptance coverage to exercise and report the occupied-port fallback.
+
 ## 1.1.0 - 2026-08-09
 
 ### Added

@@ -263,7 +263,8 @@ assert.match(popupText, /color-scheme:\s*light dark/);
 assert.match(popupText, /prefers-color-scheme:\s*dark/);
 assert.match(popupText, /function sanitizeUserVisibleError/);
 assert.match(popupText, /function normalizeBackendForRuntime/);
-assert.match(popupText, /http:\/\/127\.0\.0\.1:18787\/api/);
+assert.match(popupText, /pageParams\.get\("backendPort"\)/);
+assert.match(popupText, /installedBackendApiBase/);
 assert.match(popupText, /Provider message: " \+ sanitizeUserVisibleError\(error\)/);
 assert.match(popupText, /Could not confirm the Trello comment outcome: " \+ sanitizeUserVisibleError\(error\)/);
 assert.match(popupText, /function trelloCommentAttemptKey/);
@@ -357,6 +358,8 @@ assert.doesNotMatch(popupText, /showError\(error\.message \|\| String\(error\)\)
 const settingsText = fs.readFileSync(path.join(__dirname, "settings-powerup.html"), "utf8");
 assert.doesNotMatch(settingsText, /localStorage\.setItem\("summarizeThisBackendSessionToken"/);
 assert.match(settingsText, /sessionStorage\.setItem\("summarizeThisBackendSessionToken"/);
+assert.match(settingsText, /pageParams\.get\("backendPort"\)/);
+assert.match(settingsText, /installedBackendApiBase/);
 assert.match(settingsText, /color-scheme:\s*light dark/);
 assert.match(settingsText, /prefers-color-scheme:\s*dark/);
 assert.match(settingsText, /id="maxOutputTokens"/);
@@ -1616,7 +1619,7 @@ const adminConfig = TrelloAdminConfig.createAdminConfig({
   icon: { url: "./icon.svg" },
   capabilities: ["card-buttons", "show-settings"]
 }, "https://powerup.example.com/app/");
-assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260809.1");
+assert.equal(adminConfig.connectorUrl, "https://powerup.example.com/app/connector.html?v=20260814.1");
 assert.equal(adminConfig.manifestUrl, "https://powerup.example.com/app/manifest.json");
 assert.equal(adminConfig.iconUrl, "https://powerup.example.com/app/icon.svg");
 assert.equal(adminConfig.privacyUrl, "https://powerup.example.com/app/privacy.html");
@@ -1624,7 +1627,7 @@ assert.equal(adminConfig.termsUrl, "https://powerup.example.com/app/terms.html")
 assert.deepEqual(adminConfig.capabilities, ["card-buttons", "show-settings"]);
 
 const adminValuesText = TrelloAdminConfig.makeAdminValuesText(adminConfig);
-assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260809.1"));
+assert.ok(adminValuesText.includes("iframe Connector URL: https://powerup.example.com/app/connector.html?v=20260814.1"));
 assert.ok(adminValuesText.includes("Manifest URL: https://powerup.example.com/app/manifest.json"));
 assert.ok(adminValuesText.includes("Privacy policy URL: https://powerup.example.com/app/privacy.html"));
 assert.ok(adminValuesText.includes("Terms of service URL: https://powerup.example.com/app/terms.html"));
@@ -1695,7 +1698,7 @@ assert.equal(JSON.stringify(adminSetupPackage).includes("support@example.com"), 
 assert.doesNotMatch(JSON.stringify(adminSetupPackage), /sk-[a-z0-9]/i);
 
 const adminAutofillScript = TrelloAdminConfig.createAdminAutofillScript(adminConfig);
-assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260809.1"));
+assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/connector.html?v=20260814.1"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/manifest.json"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/privacy.html"));
 assert.ok(adminAutofillScript.includes("https://powerup.example.com/app/terms.html"));
