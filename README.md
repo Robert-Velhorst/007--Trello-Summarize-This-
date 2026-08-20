@@ -13,7 +13,9 @@ The project intentionally separates supported facts from assumptions. Confidence
 
 Current version: `1.1.3`
 
-Repository: <https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This->
+Canonical repository: <https://github.com/Robert-Velhorst/007--Trello-Summarize-This->
+
+Previous repository URL, currently redirected by GitHub: <https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This->
 
 ## Who This Is For
 
@@ -224,7 +226,7 @@ If this repository is deployed under a different GitHub Pages owner or custom do
 ### Option C: Run from source
 
 ```bash
-git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
+git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
 cd 007--Trello-Summarize-This-
 npm install
 npm start
@@ -610,7 +612,7 @@ No. It is a local/single-instance product with Docker and PostgreSQL support. Mu
 
 Use GitHub Issues for bugs, setup problems, or feature requests:
 
-<https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues>
+<https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues>
 
 For operational problems, start with:
 
