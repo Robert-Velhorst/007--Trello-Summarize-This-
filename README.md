@@ -1,477 +1,620 @@
-# Summarize This - Evidence-Backed Trello Card Analysis
+# Summarize This
 
-[![Confidence](https://img.shields.io/badge/Confidence-Evidence--based-blue)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Trello Power-Up](https://img.shields.io/badge/Trello-Power--Up-0079BF)](https://trello.com/power-ups)
-[![AI Powered](https://img.shields.io/badge/AI-Powered-purple)](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)
+Summarize This is a Trello Power-Up and optional local/backend application for turning Trello cards into reviewed, evidence-aware operational summaries.
 
-> Transform Trello cards into evidence-backed operational summaries with confidence signals, review controls, and safe export workflows.
+It is built for a practical workflow:
 
-> Version 1.1.3 ships an allowlisted static Power-Up, authenticated backend, local or PostgreSQL persistence, review-gated HAI JSON feed, Docker deployment, and a Windows 11 installer with collision-safe ports, upgrade-safe ngrok configuration, and local-only single-user bootstrap. External AI providers, Trello writes, HAI ingestion, and public tunnels remain opt-in and require explicit user approval.
+1. Open a Trello card.
+2. Click **Summarize This**.
+3. Review what the card is about, what has happened, current status, blockers, waiting items, decisions, next actions, and handoff notes.
+4. Copy, export, save, or post only after explicit review.
 
----
+The project intentionally separates supported facts from assumptions. Confidence scores are review signals, not measured accuracy guarantees.
 
-## 🎯 What is Summarize This?
+Current version: `1.1.3`
 
-**Summarize This** is a static Trello Power-Up that adds a "Summarize This" button to Trello cards.
+Repository: <https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This->
 
-The current shipped product is the browser-based Power-Up flow in `connector.js`, `popup.html`, `settings-powerup.html`, `summarizer-core.js`, `attachment-processor.js`, `ai-providers.js`, `trello-integration.js`, and `card-intelligence-ledger.js`.
+## Who This Is For
 
-The active product currently provides:
+### Non-technical users
 
-- 📊 **Evidence and review signals** — source-derived evidence plus validation findings that identify missing context and review needs
-- 🎯 **Deterministic local fallback** — a local summary when no provider is configured
-- 🤖 **Optional AI paths** — direct-provider and proxy configurations initiated from the reviewed browser workflow
-- 👥 **Private review and feedback records** — member-private ledger history, review state, and feedback
-- 🧭 **Claim boundaries** — facts, inferences, uncertainty, and unsupported claims are presented separately
-- 📤 **Operator-controlled exports** — copy/export flows, with Trello comment posting behind explicit approval
+Use this tool when Trello cards contain too much scattered information and you want a clearer status update. It can read the visible card context, produce a structured summary, and help you decide what needs action.
 
-The backend is part of the shipped product when persistence, batch job state, or HAI export is enabled. The deterministic browser summarizer continues to work without it.
+You do not need to understand the code to use the Windows installer or the Trello Power-Up setup assistant. The installer adds Start menu shortcuts for opening the local app, configuring Trello, starting an explicit ngrok tunnel, and uninstalling the app.
 
----
+### Software developers and operators
 
-## ✨ Features
+This repository contains:
 
-### 🎨 Core Features
+- A static Trello Power-Up frontend.
+- A deterministic browser summarizer.
+- Optional direct AI provider calls.
+- Optional proxy AI mode.
+- An authenticated local/server backend.
+- Local JSON or PostgreSQL persistence.
+- A review-gated HAI JSON feed.
+- Docker deployment artifacts.
+- A Windows 11 `.exe` installer build.
+- CI, diagnostics, tests, security documentation, and operational runbooks.
 
-- **One-Click Analysis** - Button on every Trello card
-- **Comprehensive Summaries** - What, why, status, next steps, insights
-- **Smart Context** - Analyzes descriptions, checklists, comments, activity, and attachment metadata
-- **Multiple AI Providers** - Choose configured direct providers or the optional proxy
-- **Export Options** - Markdown, PDF, JSON, Text, Clipboard
-- **Mobile Responsive** - Works on all devices
-- **Dark Mode Ready** - Professional, modern UI
+## What The Tool Does
 
-### 🎯 Confidence and Review Signals
+### Trello Power-Up
 
-- **Confidence Scoring** - Evidence/completeness-based review signal
-- **Validation Findings** - Missing context, unsupported claims, attachment limits, and review-needed cases
-- **Claim Boundaries** - Facts, inferences, uncertainty, and unsupported claims shown separately
-- **Human Review System** - Private review state and feedback capture
-- **Quality Indicators** - Visible confidence and validation cues; not an accuracy measurement
+The Power-Up adds a card button named **Summarize This**. The popup reads card context available through Trello's Power-Up client and produces a structured card intelligence view.
 
-### Current Product Limits
+It can use:
 
-- **Attachment Processing** - Honest attachment metadata plus optional bounded text/CSV extraction only
-- **Binary attachments remain partial** - PDF, Word, Excel, and image OCR are not fully extracted in the shipped flow
-- **Batch support is manual-first** - The popup prepares and reviews queue items, but does not run unattended full-card batch analysis
-- **Confidence is a review signal** - It is not a measured guarantee of correctness
-- **Trello writes are gated** - Comment posting and description replacement require explicit review and confirmation; description updates also check for a changed source before writing
+- Card title and description.
+- Board and list names.
+- Labels, members, due dates, checklist progress, and custom fields.
+- Comments and recent activity where Trello exposes them.
+- Attachment metadata.
+- Optional bounded text/CSV attachment previews when enabled.
+- Bounded current-list context for planning and trend signals.
 
----
+The popup then shows:
 
-## 🎬 Demo
+- Operational digest.
+- About/status/history.
+- Next actions.
+- Blockers and risks.
+- Waiting-on items.
+- Unclear or conflicting points.
+- Robert decision items.
+- VA/team handoff items.
+- Evidence and source coverage.
+- Validation findings.
+- Confidence factors.
+- Review state and prior corrections.
+- Export/postback history.
+- Runtime timing metrics.
 
-### Illustrative Analysis Output
-```
-┌────────────────────────────────────────────────┐
-│ 🧠 Analysis — review required                  │
-├────────────────────────────────────────────────┤
-│ Confidence is a heuristic review signal        │
-│ Source context: card description + checklist   │
-│                                                │
-│ Facts are separated from inferences            │
-│ Verify the card before taking action           │
-│                                                │
-│ 📝 What This Card Is About                    │
-│ Implementing account access and session        │
-│ handling for an example card...                │
-│                                                │
-│ 🎯 Current Status                             │
-│ 60% complete (3 of 5 checklist items done)    │
-│ Timing and completeness require review         │
-│                                                │
-│ ✅ Next Steps                                 │
-│ 1. Complete token refresh logic               │
-│ 2. Add rate limiting                          │
-│ 3. Write integration tests                    │
-│                                                │
-│ 💡 Key Insights                               │
-│ • Inference: testing may be a critical path   │
-│ • Uncertainty: no external status verified    │
-│ • Unsupported claims are shown separately     │
-│                                                │
-│ 📊 Operator Check                             │
-│ Do not treat this as accuracy measurement      │
-│ Review needed: yes                             │
-└────────────────────────────────────────────────┘
-```
+### Local deterministic summary
 
----
+The app works without an AI key. `summarizer-core.js` contains a deterministic fallback summarizer that builds a useful summary from Trello card structure and visible metadata.
 
-## 🚀 Quick Start
+This fallback is important because:
 
-### Windows 11
+- First-run setup works without paid provider credentials.
+- Sensitive cards can stay local until the user approves AI handoff.
+- Provider failures can fall back cleanly in Auto mode.
+- Tests can verify core behavior without external services.
 
-1. Download `SummarizeThisSetup.exe` from the current GitHub release or CI artifact.
-2. Run the installer. It installs for the current user and starts a bundled backend on `127.0.0.1:18787` with generated private secrets. If that port belongs to another application, the launcher selects the next safe loopback port automatically and passes it to the UI and ngrok.
-3. Open **Summarize This** from the Start menu for the standalone local app.
-4. Open **Configure Trello Power-Up** to get the exact hosted connector URL.
-5. For a reserved ngrok domain, open **Configure ngrok domain** once and enter its HTTPS URL. Then open **Share Backend with ngrok** only while Trello or HAI needs to reach the local backend.
+### Optional AI analysis
 
-The installer does not require Node.js, Docker, or administrator rights. ngrok is optional and is not started automatically.
+When configured, the app can call OpenAI, Google AI, or Anthropic. AI output is normalized into the same operational schema as local summaries.
 
-### 1. Deploy the Power-Up (3 minutes)
+Supported provider modes include:
 
-GitHub Pages is deployed by `.github/workflows/deploy-pages.yml` from the explicit `runtime-files.json` allowlist. The production connector is:
+- Single provider with fallback.
+- Auto provider selection.
+- Optional consensus review across configured providers.
+- Optional backend proxy endpoint so provider keys can stay server-side.
 
-`https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.3`
+The prompt is bounded to reduce privacy exposure, cost, and latency. Large card fields are capped before being sent to providers.
 
-### 2. Register as Trello Power-Up (4 minutes)
+### Review and export
 
-1. Go to https://trello.com/power-ups/admin
-2. Open the existing **Summarize This** Power-Up or create it once.
-3. Fill in details:
-   - **Name**: Summarize This
-   - **Connector URL**: the hosted `connector.html` URL above
-   - **Capabilities**: `card-buttons`, `show-settings`, `authorization-status`
-4. Save
+The tool is designed around explicit human review. It can create drafts and exports, but consequential external actions are gated.
 
-### 3. Enable on Board (1 minute)
+Supported review/export flows include:
 
-1. Open Trello board
-2. Power-Ups → Custom → Add "Summarize This"
+- Markdown export.
+- Plain text export.
+- Structured JSON ledger export.
+- Status update.
+- Operational digest.
+- Robert decision brief.
+- VA/team handoff brief.
+- Decision handoff packet.
+- Change brief from prior run history.
+- Reviewed Trello comment draft.
+- Approval-gated Trello comment posting.
 
-### 4. Configure AI Access (2 minutes)
+Trello writeback is not automatic. Comment posting requires visible review and approval. Description replacement is wired with source-freshness checks, but still requires live Trello verification before production use.
 
-1. Choose either a direct provider key or the safer backend proxy mode.
-2. Direct mode: get an OpenAI API key from https://platform.openai.com/api-keys, then Power-Up Settings -> paste the key -> Save.
-3. Proxy mode: configure an HTTPS backend proxy endpoint in Settings so provider keys stay server-side.
+### Backend and persistence
 
-### 5. Start Analyzing! ✨
+The optional backend provides account, storage, worker, operations, HAI, and support workflows.
 
-1. Open any card
-2. Click "Summarize This" button
-3. Get instant AI analysis with confidence scoring!
+It supports:
 
----
+- Authenticated user registration and login.
+- Asynchronous scrypt password hashing.
+- Local JSON store for single-machine use.
+- PostgreSQL mode with bounded connection pool and writer exclusion.
+- Workspaces and role-based access.
+- Reminders and notifications.
+- Reviewed local batch worker.
+- Backups, restore safety copies, and reconciliation.
+- Redacted support bundle.
+- Health/readiness/config endpoints.
+- Per-user HAI capability URLs.
 
-## 📖 Documentation
+The backend is single-writer by design. It is suitable for local/single-instance operation, not horizontal multi-writer production without further database and queue work.
 
-### User Guides
-- [**Quick Start Guide**](QUICK_START_GUIDE.md) - Get started in 10 minutes
-- [**User Guide**](USER_GUIDE.md) - Complete feature documentation
-- [**Deployment Guide**](FINAL_DEPLOYMENT_GUIDE.md) - Detailed deployment instructions
+### Windows 11 app
 
-### Technical Documentation
-- [**Confidence and Validation System**](999_ACCURACY_IMPLEMENTATION.md) - How confidence and review signals work
-- [**Technical Audit**](docs/TECHNICAL_AUDIT.md) - Current repo truth and inactive areas
-- [**Critical Path**](docs/CRITICAL_PATH.md) - Verified active user flow
-- [**Acceptance Tests**](docs/ACCEPTANCE_TESTS.md) - Automated and manual verification
-- [**Goal Completion Matrix**](docs/GOAL_COMPLETION_MATRIX.md) - Implemented vs partial vs missing
-- [**Phase Status Ledger**](docs/PHASE_STATUS_LEDGER.md) - Phase-by-phase status from 000 to 115
-- [**Final Verification Report**](docs/FINAL_VERIFICATION_REPORT.md) - Current evidence and open gaps
-- [**Roadmap and Blocked Items**](docs/ROADMAP_AND_BLOCKED_ITEMS.md) - Best next steps and current blockers
-- [**Improvement Roadmap**](NEXT_LEVEL_IMPROVEMENTS.md) - Future enhancements
-- [**HAI Connector**](docs/HAI_CONNECTOR.md) - Review-gated private feed and HAI setup
-- [**Power-Up README**](POWERUP_README.md) - Power-Up specific docs
+The repository includes a Windows installer path. The installer is intended for easy local use and for starting a local backend/UI without requiring the end user to install Node.js or Docker.
 
-### API Documentation
-- [**AI Providers**](ai-providers.js) - AI integration details
-- [**Trello Integration**](trello-integration.js) - Trello API usage
-- [**Accuracy System**](accuracy-system.js) - Accuracy modules
+Installed behavior:
 
----
+- Installs to `%LOCALAPPDATA%\SummarizeThis`.
+- Creates Start menu shortcuts.
+- Starts the local UI on loopback.
+- Starts the bundled backend on `127.0.0.1`, preferring port `18787`.
+- Selects a safe fallback port if the preferred backend port is occupied.
+- Stores generated secrets and runtime data with current-user-only permissions.
+- Preserves data during upgrades.
+- Can launch an explicit ngrok tunnel when the user chooses to share the backend.
+- Does not start ngrok automatically.
+- Does not create a predictable default account.
+- Refuses public tunnel exposure before a local owner account exists.
 
-## 🏗️ Architecture
+The installed app and Trello Power-Up are related but separate:
 
-### System Overview
+- The installed app can run locally on Windows.
+- Trello itself must load Power-Up files from a public HTTPS URL.
+- The Start menu setup assistant helps prepare the Trello admin values.
 
-```
-┌─────────────────────────────────────────────────┐
-│                  Trello Board                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
-│  │  Card 1  │  │  Card 2  │  │  Card 3  │     │
-│  │ [Button] │  │ [Button] │  │ [Button] │     │
-│  └──────────┘  └──────────┘  └──────────┘     │
-└─────────────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────┐
-│            Summarize This Power-Up              │
-│  ┌──────────────────────────────────────────┐  │
-│  │  1. Data Collection                      │  │
-│  │     • Card details, checklists, comments │  │
-│  │     • Attachments, activity, context     │  │
-│  └──────────────────────────────────────────┘  │
-│                     ↓                           │
-│  ┌──────────────────────────────────────────┐  │
-│  │  2. Local or Optional AI Analysis        │  │
-│  │     • Local deterministic fallback       │  │
-│  │     • Optional configured provider path  │  │
-│  │     • Human review before action         │  │
-│  └──────────────────────────────────────────┘  │
-│                     ↓                           │
-│  ┌──────────────────────────────────────────┐  │
-│  │  3. Evidence and Review Signals          │  │
-│  │     • Evidence and completeness checks   │  │
-│  │     • Facts vs. inferences               │  │
-│  │     • Explicit uncertainty                │  │
-│  └──────────────────────────────────────────┘  │
-│                     ↓                           │
-│  ┌──────────────────────────────────────────┐  │
-│  │  4. Operator Review                      │  │
-│  │     • Review state and feedback          │  │
-│  │     • Approval-gated Trello comments     │  │
-│  │     • No automatic learning claim        │  │
-│  └──────────────────────────────────────────┘  │
-│                     ↓                           │
-│  ┌──────────────────────────────────────────┐  │
-│  │  5. Results Display                      │  │
-│  │     • Confidence indicator               │  │
-│  │     • Analysis sections                  │  │
-│  │     • Review and validation details      │  │
-│  │     • Export options                     │  │
-│  └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+## Main Entry Points
+
+| File | Purpose |
+|---|---|
+| `connector.html` | Hosted iframe connector page used by Trello. Loads Trello SDK, shared config, and `connector.js`. |
+| `connector.js` | Registers Power-Up capabilities, card button, settings popup, authorization status, and badge behavior. |
+| `popup.html` | Active card analysis UI. This is the main user-facing Power-Up popup. |
+| `settings-powerup.html` | Settings UI for provider mode, keys, proxy endpoint, backend account, HAI URL, language, prompts, and limits. |
+| `summarizer-core.js` | Shared summarization, prompt building, validation, sensitivity, export, list, batch, version, and utility logic. |
+| `card-intelligence-ledger.js` | Private card intelligence ledger, history, review, feedback, evidence, and export record logic. |
+| `attachment-processor.js` | Metadata-first attachment handling and bounded safe text/CSV extraction. |
+| `ai-providers.js` | Provider integrations and sanitized provider error handling. |
+| `trello-integration.js` | Trello API integration helpers and sanitized Trello errors. |
+| `backend-server.js` | Backend HTTP server entrypoint. |
+| `backend-app.js` | Backend route application and middleware. |
+| `backend-storage.js` | Local/PostgreSQL persistence abstraction. |
+| `backend-worker.js` | Reminder and reviewed local-worker processing. |
+| `doctor.js` | Repository/runtime diagnostics. |
+| `backend-doctor.js` | Backend environment and configuration diagnostics. |
+| `runtime-files.json` | Allowlist for the public static build and Windows runtime payload. |
+| `installer/windows/build-installer.ps1` | Builds the Windows installer. |
+| `docker-compose.yml` | Single-instance Docker backend and PostgreSQL stack. |
+| `proxy/cloudflare-worker.mjs` | Optional Cloudflare Worker AI proxy reference implementation. |
+
+Legacy popup filenames such as `popup-999-accuracy.html`, `popup-enhanced.html`, `popup-nextgen.html`, and `popup-original.html` are retained for compatibility and redirect/route toward the active popup flow.
+
+## Quick Start For Users
+
+### Option A: Use the Windows 11 installer
+
+1. Download `SummarizeThisSetup.exe` from the release or CI artifact.
+2. Run it as the current Windows user.
+3. Open **Summarize This** from the Start menu.
+4. Create the local owner account when prompted.
+5. Use **Configure Trello Power-Up** if you want to connect Trello.
+6. Use **Share Backend with ngrok** only when a public HTTPS tunnel is needed.
+
+The Windows app does not require administrator rights, Node.js, Docker, or a background service.
+
+### Option B: Use the hosted Trello Power-Up
+
+1. Go to <https://trello.com/power-ups/admin>.
+2. Open or create the **Summarize This** Power-Up.
+3. Set the iframe Connector URL to the hosted `connector.html` URL.
+4. Enable the required capabilities:
+   - `card-buttons`
+   - `card-detail-badges`
+   - `show-settings`
+   - `authorization-status`
+   - `show-authorization`
+5. Save the Power-Up.
+6. Enable it on the Trello board.
+7. Open a card and click **Summarize This**.
+
+The connector URL used during the recent setup work was:
+
+```text
+https://robert-velhorst.github.io/007--Trello-Summarize-This-/connector.html?v=20260814.3
 ```
 
-### Key Components
+If this repository is deployed under a different GitHub Pages owner or custom domain, use that deployment's HTTPS `connector.html` URL instead.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| **Connector** | `connector.js` | Trello Power-Up initialization |
-| **Main UI** | `popup.html` | Card intelligence analysis interface |
-| **Legacy popup redirects** | `popup-999-accuracy.html`, `popup-enhanced.html`, `popup-nextgen.html`, `popup-original.html` | Compatibility redirects to the active popup |
-| **Accuracy** | `accuracy-system.js` | Legacy confidence/reference module alongside active popup evidence and ledger logic |
-| **AI Integration** | `ai-providers.js` | Multi-AI provider support |
-| **Trello API** | `trello-integration.js` | Card data fetching |
-| **Settings** | `settings-powerup.html` | AI access configuration |
-
----
-
-## 🎯 Confidence Breakdown
-
-### How Confidence Is Calculated
-
-| Signal | Component | Purpose | Status |
-|-------|-----------|---------|--------|
-| 1 | Data completeness | Checks whether title, description, comments, checklists, dates, labels, members, and attachments are available | ✅ |
-| 2 | Analysis completeness | Checks whether required output sections are present | ✅ |
-| 3 | Evidence coverage | Links claims to card data, comments, checklist items, attachments, and activity where available | ✅ |
-| 4 | Validation findings | Flags missing context, unsupported claims, attachment limits, and review-needed cases | ✅ |
-| 5 | Human review | Stores user corrections and review state separately from verified Trello evidence | ✅ |
-
-Confidence is a review signal, not a guaranteed accuracy percentage. High-confidence output should still be checked before decisions, exports, or Trello writeback.
-
-### Confidence Scoring Formula
-
-```javascript
-Overall Confidence = 
-    (Data Completeness × 0.25) +
-    (Analysis Completeness × 0.20) +
-    (Factual Consistency × 0.30) +
-    (Model Confidence × 0.15) +
-    (Complexity Score × 0.10)
-```
-
----
-
-## 💻 Technology Stack
-
-### Frontend
-- HTML5, CSS3, JavaScript (ES6+)
-- Trello Power-Up Client Library
-- Chart.js for visualizations
-- Font Awesome icons
-
-### AI Providers
-- OpenAI, Anthropic, and Google paths in `ai-providers.js`, when configured by the operator
-- Optional Cloudflare Worker proxy reference implementation
-- Local deterministic fallback when no provider is configured
-
-### Libraries & Tools
-- Optional bounded text/CSV extraction for small HTTPS attachments
-- Sensitive-card signals keep optional text extraction metadata-only until approval
-- Binary document and image attachments stay metadata-only in the active Power-Up
-- OCR/PDF/Office extraction libraries are not active in the shipped Power-Up
-
----
-
-## 📊 Performance and Cost
-
-No production performance benchmark, throughput target, cost guarantee, or measured accuracy result is currently verified. Provider latency and cost depend on the configured model, card contents, attachment policy, network, and external provider account. The shipped batch workflow is manual-first and must not be treated as unattended throughput.
-
-Confidence is calculated from available evidence and completeness as a review signal. Attachment limits and validation findings are surfaced when available, and private human feedback can guide later reanalysis; none of these are a measured accuracy guarantee.
-
-## Verification Status
-
-- `npm test` verifies the shared summarizer, popup contract text, ledger helpers, attachment rules, and documentation truth checks.
-- Manual Trello runtime verification is still required for badge refresh, Trello comment posting, and member-private storage behavior.
-- Completion claims for this repository should follow the audit documents in `docs/`, not older historical summaries.
-
----
-
-## 🛠️ Development
-
-### Setup
+### Option C: Run from source
 
 ```bash
-# Clone repository
-git clone https://github.com/Robert-Velhorst/007--Trello-Summarize-This-.git
+git clone https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-.git
 cd 007--Trello-Summarize-This-
-
-# No build step required - pure HTML/CSS/JS
-# Just host the files on any web server
+npm install
+npm start
 ```
 
-### Project Structure
+Local static UI:
 
-```
-007--Trello-Summarize-This-/
-├── connector.js                    # Power-Up connector
-├── popup.html                      # Main card intelligence UI
-├── popup-999-accuracy.html         # Legacy redirect to popup.html
-├── accuracy-system.js              # Accuracy modules
-├── settings-powerup.html           # Settings UI
-├── manifest.json                   # Power-Up manifest
-├── ai-providers.js                 # AI integrations
-├── trello-integration.js           # Trello API
-├── advanced-modules.js             # Phase 2 features
-├── intelligence-modules.js         # Phase 3 features
-├── attachment-processor.js         # File processing
-├── batch-processor.js              # Batch operations
-├── custom-prompts.js               # Prompt templates
-├── export.js                       # Export functionality
-├── onboarding.js                   # User onboarding
-├── test-suite.js                   # Automated tests
-└── docs/
-    ├── FINAL_DEPLOYMENT_GUIDE.md
-    ├── 999_ACCURACY_IMPLEMENTATION.md
-    └── USER_GUIDE.md
+```text
+http://127.0.0.1:17117/
 ```
 
-### Testing
+Local connector preview:
+
+```text
+http://127.0.0.1:17117/connector.html
+```
+
+Trello cannot use a private `127.0.0.1` connector URL from its hosted website. For real Trello use, deploy the static runtime to a public HTTPS origin or expose it deliberately through an approved tunnel.
+
+## Developer Setup
+
+### Requirements
+
+- Node.js 20 or 22.
+- npm.
+- PowerShell on Windows for installer scripts.
+- Docker only if running the Docker backend stack.
+- PostgreSQL only if running PostgreSQL tests or production-like storage.
+
+### Install dependencies
 
 ```bash
-# Run automated tests
-npm test
-
-# Test with real Trello data
-# 1. Configure API keys in settings
-# 2. Open any Trello card
-# 3. Click "Summarize This"
-# 4. Verify results and confidence scores
+npm install
 ```
 
-Security note: API keys are stored only through Trello member-private Power-Up storage. The standalone/local preview path saves non-key settings only and clears API key fields instead of persisting keys in `localStorage`. Settings can also use an optional HTTPS backend proxy endpoint so provider keys stay server-side; see [proxy/README.md](proxy/README.md) for the Cloudflare Worker reference proxy.
+### Run the static development server
 
----
+```bash
+npm start
+```
 
-## 🤝 Contributing
+This runs `local-dev-server.js` and serves the static app from loopback.
 
-Contributions are welcome! Here's how you can help:
+### Run the backend locally
 
-### Areas for Contribution
-- 🐛 Bug fixes
-- ✨ New features
-- 📝 Documentation improvements
-- 🌍 Translations
-- 🎨 UI/UX enhancements
-- 🧪 Test coverage
+The backend requires explicit secrets and fails closed if they are missing.
 
-### Development Process
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Example for PowerShell:
 
-### Code Style
-- Use ES6+ JavaScript
-- Follow existing code structure
-- Add comments for complex logic
-- Update documentation for new features
+```powershell
+$env:JWT_SECRET = "replace-with-at-least-32-random-characters"
+$env:ADMIN_PASSWORD = "replace-with-at-least-12-random-characters"
+$env:REGISTRATION_MODE = "closed"
+$env:BACKEND_ALLOWED_ORIGINS = "http://127.0.0.1:17117,http://localhost:17117"
+npm run start:backend
+```
 
----
+Important environment variables:
 
-## 📝 License
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | Secret used to key opaque backend session-token hashes. Minimum 32 characters. |
+| `ADMIN_PASSWORD` | Admin password for backend admin operations. Minimum 12 characters. |
+| `REGISTRATION_MODE` | `closed`, `single-user`, or `open`. Defaults to `closed`. |
+| `BACKEND_ALLOWED_ORIGINS` | Exact browser origins allowed by backend CORS. |
+| `BACKEND_STORE_PATH` | Optional path for the local JSON store. |
+| `BACKEND_STORE` | `local` or `postgres`. |
+| `DATABASE_URL` | PostgreSQL connection URL when using PostgreSQL mode. |
+| `DB_POOL_MAX` | PostgreSQL pool size, bounded by config. |
+| `RUN_WORKER` | Runs reminders and approved local jobs inside the backend process when `true`. |
+| `HAI_CONNECTOR_ENABLED` | Enables per-user read-only HAI feeds when `true`. |
+| `TRELLO_APP_KEY` | Public Trello app key used by browser auth/comment flows. |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Use `.env.example` as a template, but never commit real secrets.
 
----
+## Build And Release
 
-## 🙏 Acknowledgments
+### Build the static site
 
-- **Trello** - For the excellent Power-Up platform
-- **OpenAI** - For GPT models
-- **Anthropic** - For Claude models
-- **Google** - For Gemini models
-- **Open Source Community** - For amazing libraries and tools
+```bash
+npm run build:static
+```
 
----
+This copies only the allowlisted runtime files from `runtime-files.json` into `dist/static-site`.
 
-## 📞 Support
+### GitHub Pages
 
-### Documentation
-- [Operator Runbook](docs/OPERATOR_RUNBOOK.md)
-- [Goal Completion Matrix](docs/GOAL_COMPLETION_MATRIX.md)
-- [Final Verification Report](docs/FINAL_VERIFICATION_REPORT.md)
+`.github/workflows/deploy-pages.yml` runs on `main` and:
 
-### Issues
-Found a bug or have a feature request? [Open an issue](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)
+1. Checks out the repository.
+2. Uses Node.js 22.
+3. Runs `node static-site.test.js`.
+4. Runs `node tools/build-static-site.js`.
+5. Deploys `dist/static-site` to GitHub Pages.
 
-### Community
-- 💬 Discussions: [GitHub Discussions](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/discussions)
-- 📧 Email: Submit feedback at https://help.manus.im
+### Build the Windows backend executable
 
----
+```bash
+npm run build:windows-backend
+```
 
-## 🗺️ Roadmap
+This uses `@yao-pkg/pkg` to build:
 
-### ✅ Verified local scope
-- Browser Power-Up card analysis and deterministic fallback
-- Optional configured AI/provider paths
-- Evidence/review signals, private review state, feedback, and exports
-- Explicit claim-boundary display and approval-gated comment posting
-- Durable reviewed local worker, reminders, workspace roles, search/pagination, backups, reconciliation, and redacted support diagnostics
-- Windows 11 installer and hardened single-instance Docker backend artifacts
+```text
+dist/windows-backend/SummarizeThisBackend.exe
+```
 
-### 🚧 Partial or not shipped
-- Binary attachment extraction (PDF, Office, and image OCR)
-- Live re-verification of description replacement and public deployment
-- Measured accuracy and production performance evidence
+### Build the Windows installer
 
-### 📋 External requirements
-- Live provider credentials, public HTTPS hosting, and Trello listing approval
-- Multi-instance production database/queue, offsite disaster recovery, managed secrets, and payment integration
-- API for third-party integrations
-- Slack/Teams integration
-- Custom AI model fine-tuning
-- Enterprise features
+```powershell
+npm run build:windows-installer
+```
 
----
+Output:
 
-## 📈 Stats
+```text
+dist\windows-installer\SummarizeThisSetup.exe
+```
 
-![GitHub stars](https://img.shields.io/github/stars/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
-![GitHub forks](https://img.shields.io/github/forks/Robert-Velhorst/007--Trello-Summarize-This-?style=social)
-![GitHub issues](https://img.shields.io/github/issues/Robert-Velhorst/007--Trello-Summarize-This-)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/Robert-Velhorst/007--Trello-Summarize-This-)
+The installer includes the static runtime, launch scripts, generated secret handling, bundled backend executable, update manifest, and setup assistant. See `docs/WINDOWS_INSTALLER.md` and `installer/windows/README.md`.
 
----
+### Docker backend
 
-## Example Uses
+```bash
+cp .env.example .env
+# Edit .env with real secrets.
+docker compose up --build -d
+docker compose ps
+```
 
-These are illustrative uses, not customer testimonials:
+The Docker stack is single-instance by design. It uses PostgreSQL 17, loopback binding, a non-root backend container, dropped Linux capabilities, health checks, bounded pooling, and named volumes.
 
-- Use confidence and review signals to identify cards needing more detail before work starts.
-- Separate supported facts from assumptions before acting on a summary.
-- Prepare a reviewed batch-analysis plan while keeping Trello writes off by default.
+## AI, Privacy, And Provider Modes
 
----
+The default safe path is local deterministic analysis. AI is optional.
 
-<div align="center">
+When AI is enabled:
 
-### Made with ❤️ for better project management
+- Card context is capped before it enters the prompt.
+- Sensitive client, financial, legal, or personal signals can require explicit approval before provider handoff.
+- Provider errors are sanitized before display.
+- Direct provider keys are stored in Trello member-private Power-Up storage.
+- Local standalone preview strips API keys from local storage and saves non-key settings only.
+- Proxy mode can keep provider keys server-side.
+- AI-only mode fails if no provider/proxy path is configured.
 
-**[Get Started](FINAL_DEPLOYMENT_GUIDE.md)** • **[Documentation](USER_GUIDE.md)** • **[GitHub](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-)** • **[Issues](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/issues)**
+The tool must not be marketed as having a measured fixed accuracy percentage. The checked-in evaluation harness currently proves contract behavior against synthetic fixtures, not real-world accuracy.
 
----
+## HAI Connector
 
-**Star ⭐ this repository if you find it helpful!**
+The HAI connector is disabled by default on server deployments and enabled in the private Windows loopback backend.
 
-**Version**: 3.0 (Confidence and Validation System)
-**Last Updated**: January 31, 2026  
-**Status**: Verified local Power-Up scope; not production-ready
+It provides a read-only JSON feed containing only summaries that a signed-in user explicitly reviewed, saved, and approved for HAI.
 
-</div>
+Security properties:
+
+- Each user gets a separate capability URL.
+- The database stores only HMAC hashes of capability tokens.
+- Rotating the URL revokes the previous URL.
+- Revocation is available from settings.
+- Unapproved summaries are not returned.
+- Original card text, API keys, backend sessions, and other users' records are not returned.
+- Trello source links are cleaned to `https://trello.com/c/...`.
+- The feed cannot modify Trello or execute HAI actions.
+
+See `docs/HAI_CONNECTOR.md`.
+
+## Resource Usage
+
+The product is designed to stay lightweight:
+
+- Static Power-Up runtime.
+- No Electron dependency.
+- No always-on Windows service.
+- No automatic update polling.
+- Manual update checks only.
+- Badge refresh slowed to reduce repeated reads.
+- AI prompt and response sizes are bounded.
+- Attachment extraction is off by default and limited to small HTTPS text-like files.
+- Binary attachments remain metadata-only unless a safe supported extractor path is available.
+- Ledger/history records are compact and capped.
+- Backend worker sleeps between bounded cycles and does not fetch Trello or providers.
+- PostgreSQL pool is bounded.
+
+Current documented measurements are in `docs/RESOURCE_USAGE_ANALYSIS.md`. Measurements can drift as features change, so rerun the resource analysis before release:
+
+```bash
+npm run analyze:resources
+```
+
+## Security Model
+
+Important boundaries:
+
+- No committed provider keys or backend secrets.
+- `.env`, runtime data, installer staging, npm cache, and proxy `.dev.vars` are ignored.
+- Backend registration defaults to `closed`.
+- Windows registration uses `single-user` and accepts the first owner only from the local host.
+- Windows refuses public tunnel exposure before an owner exists.
+- Passwords are hashed with asynchronous scrypt.
+- Unknown-user login performs equivalent password work to reduce timing-based identity discovery.
+- User exports exclude password hashes, salts, and sessions.
+- Backend CORS accepts only exact configured origins.
+- Backend request bodies are bounded.
+- Error output is sanitized for keys, tokens, sensitive URLs, and common PII patterns.
+- Trello writes require explicit approval.
+- Sensitive AI handoff and sensitive exports require review.
+- HAI feeds are owner-scoped and read-only.
+- Docker runs non-root with reduced privileges.
+
+Known security gaps are tracked in `docs/SECURITY.md`. This project is suitable for local/single-instance operation, not unsupervised multi-tenant internet production without additional managed identity, secrets, monitoring, TLS ingress, offsite backups, and data-model work.
+
+## Testing And Verification
+
+### Standard tests
+
+```bash
+npm test
+```
+
+Runs:
+
+```text
+node test.js && node backend.test.js
+```
+
+### Full local suite
+
+```bash
+npm run test:all
+```
+
+Runs the core, static package, backend, operations, HTTP E2E, large dataset, PostgreSQL, adversarial, and evaluation suites. PostgreSQL-related tests require a suitable test database environment.
+
+### Useful focused checks
+
+```bash
+node test.js
+node static-site.test.js
+node backend.test.js
+node operations.test.js
+node e2e.test.js
+node large-dataset.test.js
+node adversarial.test.js
+node evaluation.test.js
+npm run doctor
+npm run doctor:backend
+npm run analyze:resources
+npm run test:windows-payload
+```
+
+### Manual Trello checks
+
+Automated tests do not prove Trello's live hosted UI. Before claiming live readiness, test on an expendable Trello card:
+
+1. Power-Up appears on the card.
+2. Popup opens.
+3. Card context loads.
+4. Local summary works with no AI key.
+5. Configured AI path works, if intended.
+6. Review state saves and reloads.
+7. Copy/export works.
+8. Trello comment draft is blocked until approval.
+9. Approved Trello comment appears on the card.
+10. Badge reflects analysis/review status.
+11. Settings save and reload correctly.
+
+Acceptance evidence and open manual steps are tracked in `docs/ACCEPTANCE_TESTS.md` and `docs/FINAL_VERIFICATION_REPORT.md`.
+
+## Repository Structure
+
+```text
+.
+|-- .github/workflows/          GitHub Actions for CI, CodeQL, Pages deployment
+|-- database/                   PostgreSQL connection helpers
+|-- docs/                       Architecture, safety, verification, runbooks, audits
+|-- fixtures/                   Synthetic labeled evaluation fixture
+|-- installer/windows/          Windows install, uninstall, launcher, ngrok scripts
+|-- middleware/                 Shared backend middleware helpers
+|-- proxy/                      Optional Cloudflare Worker AI proxy
+|-- tools/                      Static build, resource analysis, evaluation, Windows checks
+|-- connector.html              Trello iframe connector HTML entrypoint
+|-- connector.js                Trello Power-Up capability registration
+|-- popup.html                  Main Power-Up analysis popup
+|-- settings-powerup.html       Power-Up settings and backend/HAI configuration
+|-- summarizer-core.js          Main shared browser/test summarization logic
+|-- card-intelligence-ledger.js Private ledger and review model
+|-- backend-*.js                Backend server, config, storage, migrations, worker, support
+|-- runtime-files.json          Static/installer runtime allowlist
+|-- package.json                Scripts, version, and dependency metadata
+`-- update.json                 Manual Windows update manifest
+```
+
+## Documentation Map
+
+Start here:
+
+- `docs/USER_GUIDE.md` for user-facing workflows.
+- `docs/OPERATOR_RUNBOOK.md` for running, deploying, testing, and operating.
+- `docs/GOAL_COMPLETION_MATRIX.md` for implemented, partial, missing, and externally gated scope.
+- `docs/FINAL_VERIFICATION_REPORT.md` for verification evidence and open gates.
+- `docs/SECURITY.md` for the security model and known gaps.
+- `docs/RESOURCE_USAGE_ANALYSIS.md` for footprint and utilization review.
+- `docs/FEATURE_IMPROVEMENT_ANALYSIS.md` for implemented improvements and remaining product opportunities.
+- `docs/API_CONTRACT.md` for backend response contracts and endpoints.
+- `docs/HAI_CONNECTOR.md` for the HAI feed contract.
+- `docs/WINDOWS_INSTALLER.md` for installer behavior.
+- `proxy/README.md` for the optional Cloudflare Worker proxy.
+
+Historical phase documents and audit logs remain in `docs/` for traceability. Prefer the newer files above when deciding current behavior.
+
+## Current Status
+
+Implemented and verified in local/single-instance scope:
+
+- Trello Power-Up card button and popup.
+- Card context fetch and deterministic summary.
+- Optional direct provider and proxy AI paths.
+- Evidence, validation, confidence, review, feedback, and export flows.
+- Approval-gated Trello comment posting.
+- Private card intelligence ledger.
+- Backend account/session/storage/workspace/reminder/backup/reconcile/support APIs.
+- Reviewed local-worker jobs.
+- HAI JSON feed contract.
+- Docker single-instance deployment.
+- GitHub Pages static deployment workflow.
+- Windows 11 installer and local backend launcher.
+- Resource and security hardening.
+
+Partial or externally gated:
+
+- Live Trello marketplace/listing approval.
+- Fresh live Trello writeback acceptance on expendable cards.
+- Live HAI source creation under the owner's HAI session.
+- Public tunnel acceptance for the chosen ngrok domain.
+- Measured real-world accuracy claim from independently labeled cards.
+- Code signing for Windows SmartScreen.
+- Multi-instance production scaling.
+- Managed production secrets, monitoring, TLS ingress, and offsite disaster recovery.
+- Payment processing.
+- Full binary PDF/Office/OCR attachment extraction.
+
+## Common Misunderstandings
+
+### "Does it guarantee accuracy?"
+
+No. The tool provides evidence-aware summaries and confidence/review signals. It does not provide a verified fixed accuracy percentage.
+
+### "Can Trello use the Windows app directly?"
+
+No. Trello must load a Power-Up from a public HTTPS URL. The Windows app can run the local tool and backend, and an explicit tunnel can expose the backend when needed, but Trello's connector still needs HTTPS hosting.
+
+### "Are AI keys required?"
+
+No. The deterministic summarizer works without provider keys. AI keys or proxy mode are optional.
+
+### "Are Trello comments posted automatically?"
+
+No. Comment posting is approval-gated.
+
+### "Can HAI read every summary?"
+
+No. HAI receives only summaries that the signed-in owner explicitly approved for HAI through a per-user capability URL.
+
+### "Is this production multi-tenant SaaS?"
+
+No. It is a local/single-instance product with Docker and PostgreSQL support. Multi-tenant production requires additional identity, infrastructure, data model, secret management, backup, monitoring, and scaling work.
+
+## Contributing
+
+1. Create a branch from the current `main`.
+2. Keep changes scoped.
+3. Do not commit secrets, generated runtime stores, or local tunnel data.
+4. Run the relevant tests before opening a pull request.
+5. Update documentation when behavior changes.
+6. Keep confidence, AI, provider, and live-integration claims evidence-based.
+
+## License
+
+`package.json` declares the project license as MIT. A standalone `LICENSE` file is not currently present in the repository.
+
+## Support And Issues
+
+Use GitHub Issues for bugs, setup problems, or feature requests:
+
+<https://github.com/Noodzakelijk-Online/007--Trello-Summarize-This-/issues>
+
+For operational problems, start with:
+
+- `docs/TROUBLESHOOTING_GUIDE.md`
+- `docs/OPERATOR_RUNBOOK.md`
+- `docs/SECURITY.md`
+- `docs/FINAL_VERIFICATION_REPORT.md`
