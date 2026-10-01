@@ -119,3 +119,25 @@ Checked on 2026-10-01 with `backend-http-error.test.js`:
 - The Windows backend and installer were rebuilt after the fix. The inspected installer's packaged backend SHA-256 matches the rebuilt executable.
 
 These checks cover the outer server boundary, not every route's behavior under every possible database or network failure.
+
+## HAI Consumer Source Compatibility
+
+Checked on 2026-10-01 with `tools/verify-hai-consumers.js` against the locally available HAI backend checkout:
+
+- The actual Summarize This loopback HTTP E2E scenario generated a synthetic approved-summary feed and an empty continuation page. Private and other-owner summaries remained excluded, and the terminal page retained its cursor.
+- The actual HAI account-feed parser accepted those responses. The actual Connected Sources `ImportItem` and `jsonFeedEnvelope` declarations decoded the same responses, with matching IDs, content, titles, links, item types, projects and cursors.
+- Negative probes confirmed that the account-feed parser rejects an unsupported provider and Connected Sources rejects object-valued metadata. Summarize This omits metadata to satisfy both representations.
+- The tool extracts declarations using Go's AST and reports the four source snapshots' SHA-256 values. HAI's checkout is not modified. Consumer operation conversion, network policy, source normalization and database ingestion are not executed.
+- The first attempt failed before running the parser because Docker's temporary mount was not executable. The corrected isolated-container run passed; the initial attempt is not counted as a pass.
+- The default local suite passed again; PostgreSQL was explicitly skipped in that invocation. The optional cross-repository check uses a separate synthetic local store even if a test database URL is present in the parent environment.
+
+Captured source fingerprints for the passing probe:
+
+| HAI Source | SHA-256 |
+|---|---|
+| `internal/accountfeed/generic_feed.go` | `5e8319ee4393c14f07a62cb3dbe6cbd8d3c235dd37c2e7cfc0186210e44a6d2d` |
+| `internal/accountfeed/enum.go` | `c024a3d2b2bfab00082d71c319f7fc9aefd289dea50cea1d5bc68c8cf834c7e9` |
+| `internal/accountfeed/bridge.go` | `77a693b98a2102d7f3eb1918ee05aa935f07ba6d3b43358c076515b47520d392` |
+| `internal/source/service.go` | `1d0be508e46be2dfa3f78ed345b3add69696a312ae6a08522c4ea187b5283e15` |
+
+This is independent source-level compatibility evidence, not a live HAI connection. Capability/approval revocation prevents future reads but does not delete data HAI already imported.

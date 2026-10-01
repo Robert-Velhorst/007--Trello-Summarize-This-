@@ -27,6 +27,7 @@
     "test:frontend-backend": "node frontend-backend.test.js",
     "test:worker-runtime": "node worker-runtime.test.js",
     "test:http-errors": "node backend-http-error.test.js",
+    "test:hai-consumers": "node tools/verify-hai-consumers.js",
     "test:postgres-snapshot": "node postgres-snapshot.test.js",
     "test:postgres": "node postgres.test.js",
     "test:transfer": "node backend-transfer.test.js",

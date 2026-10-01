@@ -399,6 +399,8 @@ Security properties:
 
 See `docs/HAI_CONNECTOR.md`.
 
+For Hetzner hosting, HAI must read the public API hostname, not the Windows loopback address. The HAI guide includes an opt-in source-level compatibility check against an actual HAI backend checkout. Revocation stops future feed reads; it does not erase copies already imported into HAI.
+
 ## Resource Usage
 
 The product is designed to stay lightweight:

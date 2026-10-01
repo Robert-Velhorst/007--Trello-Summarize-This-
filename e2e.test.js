@@ -124,6 +124,15 @@ async function main() {
     assert.equal(beforeRestart.status, 200);
     assert.equal(beforeRestart.data.items.length, 1);
     assert.equal(beforeRestart.data.items[0].externalId, `summarize-this:${reviewed.data.summary.id}`);
+    if (process.env.HAI_CONTRACT_FIXTURE_DIR) {
+      const fixtureDirectory = path.resolve(process.env.HAI_CONTRACT_FIXTURE_DIR);
+      const nextPage = await call(baseUrl, "GET", `${connector.data.feedPath}?cursor=${encodeURIComponent(beforeRestart.data.nextCursor)}`);
+      assert.equal(nextPage.status, 200);
+      assert.deepEqual(nextPage.data.items, []);
+      assert.equal(nextPage.data.nextCursor, beforeRestart.data.nextCursor);
+      fs.writeFileSync(path.join(fixtureDirectory, "feed.json"), JSON.stringify(beforeRestart.data));
+      fs.writeFileSync(path.join(fixtureDirectory, "empty-page.json"), JSON.stringify(nextPage.data));
+    }
     await runtime.shutdown();
     runtime = null;
     runtime = await startBackendServer(options);
