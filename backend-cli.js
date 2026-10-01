@@ -6,6 +6,7 @@ const { createBackendStore, resolveBackendFilePath, resolveBackendStoreType } = 
 const { buildSupportBundle } = require("./backend-support");
 const { processWorkerCycle } = require("./backend-worker");
 const { acquireRuntimeLock } = require("./backend-lock");
+const { inspectImport, importIntoEmptyStore } = require("./backend-transfer");
 
 function print(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -13,6 +14,19 @@ function print(value) {
 
 async function main(argv = process.argv.slice(2)) {
   const command = argv[0] || "status";
+  let transfer = null;
+  if (command === "inspect-import" || command === "import-state") {
+    if (!argv[1]) throw new Error(`Usage: backend-cli.js ${command} <snapshot.json>`);
+    const checksumArgument = argv.find((value) => value.startsWith("--sha256="));
+    if (command === "import-state" && (!argv.includes("--confirm") || !checksumArgument)) {
+      throw new Error("Usage: backend-cli.js import-state <snapshot.json> --sha256=<approved-sha256> --confirm");
+    }
+    transfer = await inspectImport(argv[1], checksumArgument && checksumArgument.slice(9));
+    if (command === "inspect-import") {
+      print(transfer.summary);
+      return;
+    }
+  }
   const filePath = resolveBackendFilePath({ filePath: process.env.BACKEND_STORE_PATH });
   const runtimeLock = resolveBackendStoreType({}) === "local"
     ? await acquireRuntimeLock(filePath, `operator CLI (${command})`)
@@ -20,6 +34,10 @@ async function main(argv = process.argv.slice(2)) {
   let store = null;
   try {
   store = await createBackendStore({ filePath });
+  if (command === "import-state") {
+    print(await importIntoEmptyStore(store, transfer));
+    return;
+  }
   if (command === "status") {
     const snapshot = await store.snapshot();
     print({ schema: await store.schemaInfo(), readiness: config.backendReadiness(), counts: Object.fromEntries(Object.entries(snapshot).filter(([, value]) => Array.isArray(value)).map(([key, value]) => [key, value.length])) });

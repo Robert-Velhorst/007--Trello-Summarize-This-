@@ -48,7 +48,8 @@ const payload = JSON.parse(prompt.slice(prompt.lastIndexOf("\n{") + 1));
 const report = {
   activePopupInitialLoad: formatBytes(activeLoad),
   deferredAttachmentProcessorLoad: formatBytes(deferredAttachmentProcessorLoad),
-  installerRuntimePayload: formatBytes(runtimeTotal),
+  staticRuntimeFilesTotal: formatBytes(runtimeTotal),
+  measurementScope: "Uncompressed local file sizes and generated prompt lengths only; excludes external SDKs, backend executable, installer overhead, CPU and resident memory.",
   repositorySourceFootprint: formatBytes(sourceTotal),
   promptCharactersForLargeCard: prompt.length,
   promptCommentCount: payload.comments.length,

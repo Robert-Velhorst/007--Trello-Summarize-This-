@@ -574,12 +574,12 @@ class PostgresBackendStore extends LocalBackendStore {
   async persist() {
     if (!this.pool || !this.state) throw new Error("PostgreSQL store is not initialized.");
     this.state.meta.updatedAt = nowIso();
-    const stateSnapshot = clone(this.state);
+    const serializedState = JSON.stringify(this.state);
     const write = this.persistQueue.then(async () => {
       const expectedRevision = this.databaseRevision;
       const result = await this.pool.query(
         `UPDATE ${this.quotedTable} SET state = $1::jsonb, revision = revision + 1, updated_at = NOW() WHERE id = 'primary' AND revision = $2 RETURNING revision`,
-        [JSON.stringify(stateSnapshot), expectedRevision]
+        [serializedState, expectedRevision]
       );
       if (result.rowCount !== 1) {
         const current = await this.pool.query(`SELECT revision, state FROM ${this.quotedTable} WHERE id = 'primary'`);
