@@ -52,8 +52,23 @@ jobs:
       - name: Verify production static package
         run: node static-site.test.js
 
+      - name: Verify local server access restrictions
+        run: node local-dev-server.test.js
+
+      - name: Verify frontend session revocation
+        run: node frontend-backend.test.js
+
+      - name: Verify worker startup and shutdown
+        run: node worker-runtime.test.js
+
+      - name: Verify queued PostgreSQL snapshots
+        run: node postgres-snapshot.test.js
+
       - name: Run backend contract tests
         run: node backend.test.js
+
+      - name: Verify offline data transfer
+        run: node backend-transfer.test.js
 
       - name: Run operations and worker tests
         run: node operations.test.js
@@ -107,6 +122,9 @@ jobs:
             docs/CODEX_WORKLOG.md \
             docs/CODEX_CHECKPOINTS.md \
             docs/TASK_GRAPH.md \
+            docs/HETZNER_DEPLOYMENT.md \
+            docs/HETZNER_VERIFICATION.md \
+            docs/RESOURCE_USAGE_ANALYSIS.md \
             docs/FINAL_NO_EXCUSES_SEARCH.md; do
             [ -f "$f" ] || (echo "MISSING: $f" && exit 1)
           done
@@ -169,7 +187,7 @@ jobs:
         shell: powershell
         run: |
           $runtimeFiles = Get-Content runtime-files.json -Raw | ConvertFrom-Json
-          foreach ($file in @($runtimeFiles) + @("Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")) {
+          foreach ($file in @($runtimeFiles) + @("Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "install.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")) {
             if (-not (Test-Path -LiteralPath (Join-Path ".tmp\installer-payload" $file) -PathType Leaf)) {
               throw "Installer payload is missing $file"
             }

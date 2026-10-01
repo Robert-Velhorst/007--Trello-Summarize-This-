@@ -1,14 +1,15 @@
 "use strict";
 
 const { createBackendStore, resolveBackendFilePath, resolveBackendStoreType } = require("./backend-storage");
-const { processWorkerCycle } = require("./backend-worker");
+const { processWorkerCycle, normalizeWorkerInterval } = require("./backend-worker");
 const { acquireRuntimeLock } = require("./backend-lock");
 
-const intervalMs = Math.max(1_000, Number(process.env.WORKER_INTERVAL_MS || 5_000));
+const intervalMs = normalizeWorkerInterval(process.env.WORKER_INTERVAL_MS);
 const once = process.argv.includes("--once");
 const filePath = resolveBackendFilePath({});
 let runtimeLock = null;
 let stopping = false;
+let wakeSleep = null;
 
 async function acquireLock() {
   runtimeLock = resolveBackendStoreType({}) === "local"
@@ -28,23 +29,27 @@ async function run() {
     do {
       const result = await processWorkerCycle(store);
       console.log(JSON.stringify({ timestamp: new Date().toISOString(), result }));
-      if (once) break;
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      if (once || stopping) break;
+      await new Promise((resolve) => {
+        const finish = () => { wakeSleep = null; resolve(); };
+        const timer = setTimeout(finish, intervalMs);
+        wakeSleep = () => { clearTimeout(timer); finish(); };
+      });
     } while (!stopping);
   } finally {
     if (typeof store.close === "function") await store.close();
   }
 }
 
-async function stop() {
+function stop() {
   stopping = true;
-  await releaseLock();
+  if (wakeSleep) wakeSleep();
 }
 
-process.on("SIGINT", () => stop().then(() => process.exit(0)));
-process.on("SIGTERM", () => stop().then(() => process.exit(0)));
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
 
-run().then(stop).catch(async (error) => {
+run().then(releaseLock).catch(async (error) => {
   console.error(error.message);
   await releaseLock().catch(() => {});
   process.exit(1);

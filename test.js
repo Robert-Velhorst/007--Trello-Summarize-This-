@@ -114,10 +114,12 @@ const localServerText = fs.readFileSync(path.join(__dirname, "local-dev-server.j
 assert.match(localServerText, /path\.normalize/);
 assert.match(localServerText, /path\.relative\(ROOT, resolved\)/);
 assert.match(localServerText, /require\.main === module/);
-assert.match(localServerText, /Open http:\/\/\$\{HOST\}:\$\{PORT\}\/connector\.html/);
+assert.match(localServerText, /Open http:\/\/\$\{HOST\}:\$\{port\}\/connector\.html/);
 const LocalDevServer = require("./local-dev-server");
 assert.equal(LocalDevServer.safePathname("/%E0%A4%A"), null);
 assert.equal(LocalDevServer.resolveFile("/connector.html"), path.join(__dirname, "connector.html"));
+assert.equal(LocalDevServer.resolveFile("/"), path.join(__dirname, "index.html"));
+assert.equal(LocalDevServer.resolveFile("/.env.example"), null);
 assert.equal(LocalDevServer.isPathInsideRoot(path.resolve(__dirname, "..", `${path.basename(__dirname)}-escape`, "secret.txt")), false);
 const doctorText = fs.readFileSync(path.join(__dirname, "doctor.js"), "utf8");
 assert.match(doctorText, /Doctor checks passed/);

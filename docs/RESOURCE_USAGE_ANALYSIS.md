@@ -1,12 +1,12 @@
 # Resource Usage Analysis
 
-Date: 2026-08-08
+Footprint refreshed: 2026-10-01. Optimization descriptions below originated in the 2026-08-08 review and are not a new live-server performance audit.
 
 ## Summary
 
-The active Trello Power-Up is already lightweight because it is a static browser app. The biggest resource risk was not CPU or memory, but unbounded AI request size on very large cards and unnecessary static surface area in a Windows install. Both were reduced without removing user-facing features.
+Resource improvements focus on bounded AI payloads, a restricted static runtime package and avoiding redundant whole-state serialization in the backend. A static browser app still consumes CPU and memory; its file footprint alone does not establish runtime efficiency. The measurements below separate local file sizes and synthetic persistence timings from still-unmeasured hosted performance.
 
-The optional backend remains single-instance and dependency-free. Its worker runs inside the backend process, sleeps between bounded cycles, and makes no provider or Trello request. Worker reminder/event changes are committed in one store transaction per cycle, password hashing uses asynchronous scrypt, sessions and operational collections are bounded, and local backups retain the newest 20 snapshots.
+The optional backend remains single-instance and uses Node's built-in HTTP server plus the `pg` PostgreSQL client. The Hetzner stack adds PostgreSQL and Caddy; it is not dependency-free. Its worker runs inside the backend process, sleeps between bounded cycles, and makes no provider or Trello request. Worker reminder/event changes are committed in one store transaction per cycle, password hashing uses asynchronous scrypt, sessions and operational collections are bounded, and local backups retain the newest 20 snapshots.
 
 ## Measured Footprint
 
@@ -16,17 +16,47 @@ Measured with:
 npm run analyze:resources
 ```
 
-Current 2026-08-08 results:
+Local 2026-10-01 results:
 
-- Active popup initial local files: 439.4 KB.
-- Deferred attachment processor: 40.2 KB.
-- Windows installer runtime payload: 610.0 KB.
-- Whole repository source footprint, excluding `.git` and `dist`: 2.67 MB.
-- Generated Windows installer executable: 357,888 bytes.
+- Active popup initial local files: 449.6 KB.
+- Deferred attachment processor: 41.4 KB.
+- Static runtime files: 631.5 KB, excluding the backend executable and installer overhead.
+- Repository source footprint at measurement time: 2.67 MB, excluding `.git`, `.tmp`, `.npm-cache`, `dist` and `node_modules`. This changes as documentation and source files are edited.
+- Windows installer rebuilt on 2026-10-01: 22,041,088 bytes, including the packaged Node backend and latest worker lifecycle fixes. It is unsigned. The historical 357,888-byte figure described an older package and is not representative of this build.
 - Large-card AI prompt after caps: 19,701 characters.
 - Large-card prompt comments included: 12.
 - Longest included comment: 700 characters.
 - Included card description: 2,499 characters.
+
+These are uncompressed file sizes and prompt lengths, not browser memory, CPU, network transfer sizes or end-user latency. External Trello SDK downloads are excluded. Production resource utilization and response latency on Hetzner remain unmeasured until authenticated deployment and representative workloads are available. The Compose defaults use a four-connection application pool and 64 MB PostgreSQL shared buffers; these configuration values are not measured memory ceilings.
+
+## PostgreSQL Snapshot Serialization
+
+The PostgreSQL writer now captures one immutable JSON string before queueing an update. Previously it serialized the full state, parsed that string into a cloned object, and serialized the clone again for the SQL parameter. The new path removes the intermediate object tree and two redundant conversions while preserving per-write snapshots and optimistic revision checks.
+
+Run `npm.cmd run benchmark:postgres-persist -- c4b2d44` to compare the current implementation with that Git revision's storage implementation. Omitting the revision uses `HEAD`. This executes the real persistence method with a stub SQL pool; it never connects to a database.
+
+Local observation on 2026-10-01, Node v25.2.1, baseline `c4b2d44`, 500 synthetic records, approximately 5 MB of state, 20 measured writes after three warmups:
+
+| Metric | Baseline | Current |
+|---|---|---|
+| Median serialization/queue time | 21.83 ms | 10.61 ms |
+| p95 serialization/queue time | 27.39 ms | 14.13 ms |
+| Process CPU across measured writes | 437 ms | 203 ms |
+
+These are microbenchmark observations, not production response times or measured peak-memory savings. PostgreSQL I/O, network and browser work are excluded. A separate regression test verifies queued writes retain their distinct snapshots and ordered revision numbers.
+
+A second run during concurrent local build activity measured medians of 34.14 ms versus 11.78 ms and CPU totals of 547 ms versus 235 ms. The variation is why these values are observations, not fixed latency promises or CI thresholds.
+
+## HAI Feed Boundaries
+
+Checked with backend contract tests on 2026-10-01:
+
+- Responses contain at most 100 records and 1.5 MiB of encoded JSON, including HTML-safe escaping and cursor fields.
+- Each exported summary is truncated to 100,000 UTF-8 bytes without splitting surrogate pairs.
+- Budget calculation encodes each candidate once and stops at the first record that does not fit. It no longer constructs a full oversized page and repeatedly serializes the shrinking page to decide its size. Final response encoding is still required.
+- The byte-budget test verifies large escapable text, multibyte text and complete delivery across subsequent pages.
+- This reduces redundant encoding work and temporary page allocations; no production latency or resident-memory improvement is claimed without a workload measurement.
 
 ## Optimizations Applied
 

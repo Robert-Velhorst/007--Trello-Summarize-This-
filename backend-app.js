@@ -23,15 +23,18 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function encodeJson(payload) {
+  return JSON.stringify(payload).replace(/[<>&\u2028\u2029]/g, (character) => {
+    return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+  });
+}
+
 function json(res, status, payload, headers) {
   res.writeHead(status, Object.assign({
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   }, headers || {}));
-  const body = JSON.stringify(payload).replace(/[<>&\u2028\u2029]/g, (character) => {
-    return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
-  });
-  res.end(body);
+  res.end(encodeJson(payload));
 }
 
 function text(res, status, body) {
@@ -740,27 +743,41 @@ async function route(req, res, store, adminPasswordRecord) {
     const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 100) || 100));
     const approved = (await store.list("summaries"))
       .filter((item) => item.userId === token.userId && item.haiApprovedAt && connectorCursor(item) > requestedCursor)
-      .sort((left, right) => connectorCursor(left).localeCompare(connectorCursor(right)));
+      .sort((left, right) => {
+        const leftCursor = connectorCursor(left);
+        const rightCursor = connectorCursor(right);
+        return leftCursor < rightCursor ? -1 : leftCursor > rightCursor ? 1 : 0;
+      });
     const page = approved.slice(0, limit);
-    const items = page.map((item) => ({
-      externalId: `summarize-this:${item.id}`,
-      title: String(item.title || "Reviewed Trello summary").slice(0, 300),
-      content: truncateUtf8(item.summary, 100_000),
-      sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
-      itemType: "card",
-      provider: "trello",
-      accountLabel: "summarize-this",
-      projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
-      receivedAt: item.haiApprovedAt
-    }));
-    while (items.length > 1) {
-      const candidateCursor = connectorCursor(page[items.length - 1]);
-      if (Buffer.byteLength(JSON.stringify({ items, cursor: candidateCursor, nextCursor: candidateCursor }), "utf8") <= HAI_FEED_MAX_BYTES) break;
-      items.pop();
+    const items = [];
+    let itemBytes = 0;
+    let responseCursor = requestedCursor;
+    for (const item of page) {
+      const feedItem = {
+        externalId: `summarize-this:${item.id}`,
+        title: String(item.title || "Reviewed Trello summary").slice(0, 300),
+        content: truncateUtf8(item.summary, 100_000),
+        sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
+        itemType: "card",
+        provider: "trello",
+        accountLabel: "summarize-this",
+        projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
+        receivedAt: item.haiApprovedAt
+      };
+      const candidateCursor = connectorCursor(item);
+      const candidateBytes = itemBytes + (items.length ? 1 : 0) + Buffer.byteLength(encodeJson(feedItem), "utf8");
+      const envelopeBytes = Buffer.byteLength(encodeJson({ items: [], cursor: candidateCursor, nextCursor: candidateCursor }), "utf8");
+      if (candidateBytes + envelopeBytes > HAI_FEED_MAX_BYTES) {
+        if (!items.length) {
+          json(res, 422, { error: "A HAI feed record exceeds the response byte limit." });
+          return;
+        }
+        break;
+      }
+      items.push(feedItem);
+      itemBytes = candidateBytes;
+      responseCursor = candidateCursor;
     }
-    const responseCursor = items.length
-      ? connectorCursor(page[items.length - 1])
-      : requestedCursor;
     await store.updateRecord("haiTokens", token.id, (record) => {
       record.lastUsedAt = nowIso();
     });
@@ -1034,23 +1051,25 @@ async function route(req, res, store, adminPasswordRecord) {
       return;
     }
     const rawToken = `hai_${crypto.randomBytes(32).toString("base64url")}`;
-    const records = await store.list("haiTokens");
-    records.forEach((item) => {
-      if (item.userId === context.user.id && !item.revokedAt) {
-        item.revokedAt = nowIso();
-        item.updatedAt = item.revokedAt;
-      }
+    await store.transaction((state) => {
+      const records = state.haiTokens;
+      records.forEach((item) => {
+        if (item.userId === context.user.id && !item.revokedAt) {
+          item.revokedAt = nowIso();
+          item.updatedAt = item.revokedAt;
+        }
+      });
+      records.unshift({
+        id: createId("hai-token"),
+        userId: context.user.id,
+        tokenHash: haiTokenHash(rawToken),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        revokedAt: null,
+        lastUsedAt: null
+      });
+      state.haiTokens = records.slice(0, 1000);
     });
-    records.unshift({
-      id: createId("hai-token"),
-      userId: context.user.id,
-      tokenHash: haiTokenHash(rawToken),
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      revokedAt: null,
-      lastUsedAt: null
-    });
-    await store.replace("haiTokens", records.slice(0, 1000));
     await appendEvent(store, "hai.connector_token_rotated", { userId: context.user.id });
     json(res, 201, {
       success: true,
@@ -1064,16 +1083,17 @@ async function route(req, res, store, adminPasswordRecord) {
   if (req.method === "DELETE" && pathname === "/api/integrations/hai/token") {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
-    const records = await store.list("haiTokens");
-    let revoked = 0;
-    records.forEach((item) => {
-      if (item.userId === context.user.id && !item.revokedAt) {
-        item.revokedAt = nowIso();
-        item.updatedAt = item.revokedAt;
-        revoked += 1;
-      }
+    const revoked = await store.transaction((state) => {
+      let count = 0;
+      state.haiTokens.forEach((item) => {
+        if (item.userId === context.user.id && !item.revokedAt) {
+          item.revokedAt = nowIso();
+          item.updatedAt = item.revokedAt;
+          count += 1;
+        }
+      });
+      return count;
     });
-    await store.replace("haiTokens", records);
     await appendEvent(store, "hai.connector_token_revoked", { userId: context.user.id, revoked });
     json(res, 200, { success: true, revoked });
     return;

@@ -443,6 +443,55 @@ async function main() {
     assert.equal(recurringSecondPage.data.items.at(-1).externalId, "summarize-this:recurring-104");
     assert.equal(recurringSecondPage.data.cursor, "2030-01-01T01:44:00.000Z|recurring-104");
 
+    const tiedApprovalTime = "2031-01-01T00:00:00.000Z";
+    const tiedIds = ["tied-a", "tied-A", "tied_0"].sort();
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat(tiedIds.map((id) => ({
+      id, userId: customRegister.data.user.id, summary: id, haiApprovedAt: tiedApprovalTime
+    }))));
+    let tiedCursor = `${tiedApprovalTime}|`;
+    const deliveredIds = [];
+    for (let index = 0; index < tiedIds.length + 1; index++) {
+      const page = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?limit=1&cursor=${encodeURIComponent(tiedCursor)}`);
+      assert.equal(page.status, 200);
+      deliveredIds.push(...page.data.items.map((item) => item.externalId.replace("summarize-this:", "")));
+      tiedCursor = page.data.nextCursor;
+    }
+    assert.deepEqual(deliveredIds, tiedIds, "HAI pagination must use the same ordering for sorting and cursor filtering");
+
+    const largeApprovalTime = "2032-01-01T00:00:00.000Z";
+    const largeIds = Array.from({ length: 7 }, (_, index) => `large-feed-${index}`);
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat(largeIds.map((id, index) => ({
+      id, userId: customRegister.data.user.id, haiApprovedAt: largeApprovalTime,
+      summary: index === 6 ? "\uD83D\uDE00".repeat(25001) : "<>&".repeat(33333)
+    }))));
+    let largeCursor = `${largeApprovalTime}|`;
+    const deliveredLargeIds = [];
+    for (let index = 0; index < largeIds.length + 1; index++) {
+      const page = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(largeCursor)}`);
+      assert.equal(page.status, 200);
+      assert.ok(Buffer.byteLength(page.text, "utf8") <= 1536 * 1024, "Final escaped HAI response must respect its byte budget");
+      for (const item of page.data.items) {
+        deliveredLargeIds.push(item.externalId.replace("summarize-this:", ""));
+        if (item.externalId.endsWith("large-feed-6")) {
+          assert.equal(Buffer.byteLength(item.content, "utf8"), 100000);
+          assert.equal(item.content.endsWith("\uD83D\uDE00"), true);
+        }
+      }
+      largeCursor = page.data.nextCursor;
+      if (!page.data.items.length) break;
+    }
+    assert.deepEqual(deliveredLargeIds, largeIds, "Byte-limited HAI pages must deliver all remaining records");
+    const oversizedId = "oversized-feed-" + "x".repeat(1536 * 1024);
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat([{
+      id: oversizedId, userId: customRegister.data.user.id, summary: "Legacy oversized identifier",
+      haiApprovedAt: "2033-01-01T00:00:00.000Z"
+    }]));
+    const oversizedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent("2033-01-01T00:00:00.000Z|")}`);
+    assert.equal(oversizedFeed.status, 422);
+    assert.ok(Buffer.byteLength(oversizedFeed.text, "utf8") < 1024);
+    assert.equal(oversizedFeed.data.nextCursor, undefined);
+    await app.store.replace("summaries", (await app.store.list("summaries")).filter((item) => item.id !== oversizedId));
+
     const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
       Authorization: `Bearer ${token}`
     });
@@ -454,6 +503,19 @@ async function main() {
     });
     assert.equal(revokedHaiToken.status, 200);
     assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 404);
+
+    const parallelTokens = await Promise.all([token, secondaryRegister.data.token].map((sessionToken) =>
+      requestJson(app, "POST", "/api/integrations/hai/token", {}, { Authorization: `Bearer ${sessionToken}` })
+    ));
+    for (const issued of parallelTokens) {
+      assert.equal(issued.status, 201);
+      assert.equal((await requestJson(app, "GET", issued.data.feedPath)).status, 200,
+        "Concurrent token creation for different users must preserve both capabilities");
+    }
+    await Promise.all([token, secondaryRegister.data.token].map((sessionToken) =>
+      requestJson(app, "DELETE", "/api/integrations/hai/token", undefined, { Authorization: `Bearer ${sessionToken}` })
+    ));
+    for (const issued of parallelTokens) assert.equal((await requestJson(app, "GET", issued.data.feedPath)).status, 404);
 
     const credits = await requestJson(app, "GET", "/api/user/credits", undefined, {
       Authorization: `Bearer ${token}`

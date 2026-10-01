@@ -1,0 +1,28 @@
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN to a public DNS hostname}
+    volumes:
+      - ./deployment/hetzner/Caddyfile:/etc/caddy/Caddyfile:ro
+      - summarize-this-caddy-data:/data
+      - summarize-this-caddy-config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - edge
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+volumes:
+  summarize-this-caddy-data:
+  summarize-this-caddy-config:

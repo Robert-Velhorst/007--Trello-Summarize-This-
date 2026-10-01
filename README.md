@@ -37,6 +37,7 @@ This repository contains:
 - Local JSON or PostgreSQL persistence.
 - A review-gated HAI JSON feed.
 - Docker deployment artifacts.
+- A single-server Hetzner deployment overlay for the backend.
 - A Windows 11 `.exe` installer build.
 - CI, diagnostics, tests, security documentation, and operational runbooks.
 
@@ -139,7 +140,7 @@ The backend is single-writer by design. It is suitable for local/single-instance
 
 ### Windows 11 app
 
-The repository includes a Windows installer path. The installer is intended for easy local use and for starting a local backend/UI without requiring the end user to install Node.js or Docker.
+The repository includes a Windows installer path. The installer is intended for easy local use and for starting a local backend/UI without requiring the end user to install Node.js or Docker. For a persistent remote backend, deploy the backend to Hetzner instead of keeping a tunnel open from this PC.
 
 Installed behavior:
 
@@ -150,8 +151,8 @@ Installed behavior:
 - Selects a safe fallback port if the preferred backend port is occupied.
 - Stores generated secrets and runtime data with current-user-only permissions.
 - Preserves data during upgrades.
-- Can launch an explicit ngrok tunnel when the user chooses to share the backend.
-- Does not start ngrok automatically.
+- Retains an optional ngrok launcher for legacy local sharing; it is not required when using the Hetzner-hosted backend.
+- Does not start any tunnel automatically.
 - Does not create a predictable default account.
 - Refuses public tunnel exposure before a local owner account exists.
 
@@ -183,6 +184,10 @@ The installed app and Trello Power-Up are related but separate:
 | `runtime-files.json` | Allowlist for the public static build and Windows runtime payload. |
 | `installer/windows/build-installer.ps1` | Builds the Windows installer. |
 | `docker-compose.yml` | Single-instance Docker backend and PostgreSQL stack. |
+| `docker-compose.hetzner.yml` | Optional public HTTPS proxy for the cloud deployment. |
+| `backend-transfer.js` | Bounded, checksum-verified import into an empty store, preserving existing account and application records. |
+| `deployment/hetzner/` | Caddy HTTPS proxy and first-owner setup helper for the Hetzner deployment. |
+| `docs/HETZNER_DEPLOYMENT.md` | Hetzner prerequisites, deployment, secure owner setup, Trello connection, updates, and data boundary. |
 | `proxy/cloudflare-worker.mjs` | Optional Cloudflare Worker AI proxy reference implementation. |
 
 Legacy popup filenames such as `popup-999-accuracy.html`, `popup-enhanced.html`, `popup-nextgen.html`, and `popup-original.html` are retained for compatibility and redirect/route toward the active popup flow.
@@ -196,7 +201,7 @@ Legacy popup filenames such as `popup-999-accuracy.html`, `popup-enhanced.html`,
 3. Open **Summarize This** from the Start menu.
 4. Create the local owner account when prompted.
 5. Use **Configure Trello Power-Up** if you want to connect Trello.
-6. Use **Share Backend with ngrok** only when a public HTTPS tunnel is needed.
+6. For a backend that remains available when your PC is off, follow [the Hetzner deployment guide](docs/HETZNER_DEPLOYMENT.md) and set the backend API URL in Power-Up settings. The legacy ngrok shortcut is not needed for that setup.
 
 The Windows app does not require administrator rights, Node.js, Docker, or a background service.
 
@@ -459,14 +464,31 @@ node test.js && node backend.test.js
 npm run test:all
 ```
 
-Runs the core, static package, backend, operations, HTTP E2E, large dataset, PostgreSQL, adversarial, and evaluation suites. PostgreSQL-related tests require a suitable test database environment.
+Runs the core, static package, local HTTP allowlist, frontend logout, worker lifecycle, backend, transfer, operations, HTTP E2E, large dataset, PostgreSQL, adversarial, and evaluation suites.
+
+Without `TEST_DATABASE_URL`, the HTTP E2E test uses isolated local-file storage; PostgreSQL-only checks report that they are skipped. With that variable set, the E2E test uses PostgreSQL and verifies automatic processing by the integrated worker, reviewed-summary persistence, private HAI feed isolation, session and connector survival across a backend restart, approval revocation and logout. Provider credentials and proxy configuration are cleared inside this synthetic test process; it does not need paid AI services. The transfer and PostgreSQL suites also exercise the real database.
+
+Use a disposable test database, never a production database. These tests create and remove temporary tables and write synthetic accounts, summaries and session records. Example for a PostgreSQL instance you have already started:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://test_user:test_password@127.0.0.1:5432/test_database"
+npm.cmd run test:all
+Remove-Item Env:TEST_DATABASE_URL
+```
+
+The automated HTTP tests run against loopback servers, not the live Trello iframe or the actual HAI consumer. Passing them does not prove a hosted deployment or installed Windows acceptance.
 
 ### Useful focused checks
 
 ```bash
 node test.js
 node static-site.test.js
+node local-dev-server.test.js
+node frontend-backend.test.js
+node worker-runtime.test.js
+node postgres-snapshot.test.js
 node backend.test.js
+node backend-transfer.test.js
 node operations.test.js
 node e2e.test.js
 node large-dataset.test.js
@@ -475,6 +497,7 @@ node evaluation.test.js
 npm run doctor
 npm run doctor:backend
 npm run analyze:resources
+npm run benchmark:postgres-persist -- c4b2d44
 npm run test:windows-payload
 ```
 
@@ -552,6 +575,8 @@ Implemented and verified in local/single-instance scope:
 - Reviewed local-worker jobs.
 - HAI JSON feed contract.
 - Docker single-instance deployment.
+- Hetzner Compose overlay with a private PostgreSQL network and Caddy HTTPS ingress (deployment not yet live-verified).
+- Windows JSON snapshot import into an empty local/PostgreSQL store, with checksum and overwrite protection.
 - GitHub Pages static deployment workflow.
 - Windows 11 installer and local backend launcher.
 - Resource and security hardening.
@@ -561,11 +586,12 @@ Partial or externally gated:
 - Live Trello marketplace/listing approval.
 - Fresh live Trello writeback acceptance on expendable cards.
 - Live HAI source creation under the owner's HAI session.
-- Public tunnel acceptance for the chosen ngrok domain.
+- Live Hetzner server, DNS, firewall, TLS issuance, and end-to-end Trello acceptance.
+- Transfer and verification of the owner's existing Windows backend data; the new database remains empty until an explicit import.
 - Measured real-world accuracy claim from independently labeled cards.
 - Code signing for Windows SmartScreen.
 - Multi-instance production scaling.
-- Managed production secrets, monitoring, TLS ingress, and offsite disaster recovery.
+- Managed production secrets, monitoring/alerting, and offsite disaster recovery.
 - Payment processing.
 - Full binary PDF/Office/OCR attachment extraction.
 
@@ -577,7 +603,7 @@ No. The tool provides evidence-aware summaries and confidence/review signals. It
 
 ### "Can Trello use the Windows app directly?"
 
-No. Trello must load a Power-Up from a public HTTPS URL. The Windows app can run the local tool and backend, and an explicit tunnel can expose the backend when needed, but Trello's connector still needs HTTPS hosting.
+No. Trello must load a Power-Up from a public HTTPS URL. The static connector remains hosted separately on GitHub Pages. With the backend deployed to Hetzner, the Power-Up can call its HTTPS API directly and does not need an ngrok tunnel.
 
 ### "Are AI keys required?"
 
