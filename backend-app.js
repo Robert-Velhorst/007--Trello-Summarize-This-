@@ -990,17 +990,17 @@ async function route(req, res, store, adminPasswordRecord) {
     const sourceUri = sanitizeTrelloSourceUri(body.sourceUri);
     const runId = String(body.runId || "").trim().slice(0, 160);
     const response = await withIdempotency(req, store, `reviewed-summary:${context.user.id}`, async () => {
-      const existing = runId
-        ? (await store.list("summaries")).find((item) => item.userId === context.user.id && item.runId === runId)
-        : null;
-      if (existing) {
-        const updated = body.haiApproved === true && !existing.haiApprovedAt
-          ? await setSummaryHaiApproval(store, existing.id, context.user.id, true)
-          : existing;
-        if (!updated) return { status: 404, payload: { success: false, error: "Summary not found" } };
-        return { status: 200, payload: { success: true, summary: cleanSummaryForUser(updated), existing: true } };
-      }
-      const summary = await store.transaction((state) => {
+      const saved = await store.transaction((state) => {
+        const existing = runId
+          ? state.summaries.find((item) => item.userId === context.user.id && item.runId === runId)
+          : null;
+        if (existing) {
+          if (body.haiApproved === true && !existing.haiApprovedAt) {
+            markHaiApproval(state, existing);
+            existing.updatedAt = nowIso();
+          }
+          return { summary: existing, existing: true };
+        }
         const record = {
           createdAt: nowIso(),
           updatedAt: nowIso(),
@@ -1023,8 +1023,12 @@ async function route(req, res, store, adminPasswordRecord) {
         if (body.haiApproved === true) markHaiApproval(state, record);
         state.summaries.unshift(record);
         state.summaries = state.summaries.slice(0, 1000);
-        return record;
+        return { summary: record, existing: false };
       });
+      const { summary } = saved;
+      if (saved.existing) {
+        return { status: 200, payload: { success: true, summary: cleanSummaryForUser(summary), existing: true } };
+      }
       await appendEvent(store, "summary.reviewed_saved", {
         userId: context.user.id,
         summaryId: summary.id,

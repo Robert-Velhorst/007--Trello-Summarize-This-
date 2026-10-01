@@ -155,3 +155,14 @@ Checked on 2026-10-01:
 - The actual HAI parser/schema probe passed again after this change. The Windows backend and installer were rebuilt, and the inspected installer's backend hash matches the rebuilt executable.
 
 The logical cursor clock is scoped to the existing single-writer store. This does not introduce multi-instance write support or prove live HAI ingestion. Existing records are scanned when allocating a cursor; normal reviewed saves retain up to 1,000 records, but imported legacy collections may be larger. Target-host latency under sustained load remains unmeasured.
+
+## Concurrent Reviewed-Save Retries
+
+Checked on 2026-10-01:
+
+- A regression test reproduced three simultaneous requests with the same owner and `runId` creating three summary rows before the fix.
+- Existing-run lookup, optional approval and creation now share one synchronous store transaction. A concurrent retry returns the already saved row without replacing its reviewed content or allocating another HAI cursor.
+- Backend contract tests verify one creation, two existing-row responses, matching IDs, one stored row and one incremental HAI item. The real loopback HTTP E2E test verifies concurrent retries and persistence through restart; this same scenario runs against PostgreSQL in CI.
+- The full local suite passed. PostgreSQL was explicitly skipped in that invocation because `TEST_DATABASE_URL` was unset; a passing local-store run is not PostgreSQL acceptance.
+
+Deduplication remains owner-scoped and requires a nonempty `runId`. This fix does not repair historical duplicates, add multi-writer support or establish live Hetzner/Trello/HAI acceptance.

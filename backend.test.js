@@ -547,6 +547,16 @@ async function main() {
     const reapprovedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(concurrentFeed.data.nextCursor)}`);
     assert.deepEqual(reapprovedFeed.data.items.map((item) => item.externalId), [`summarize-this:${targetRecord.id}`]);
 
+    const duplicateSaves = await Promise.all([0, 1, 2].map(() => requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true, haiApproved: true, title: "One reviewed run", content: "Save this exact content once",
+      runId: "concurrent-identical-run"
+    }, { Authorization: `Bearer ${token}` })));
+    assert.deepEqual(duplicateSaves.map((result) => result.status).sort(), [200, 200, 201]);
+    assert.equal(new Set(duplicateSaves.map((result) => result.data.summary.id)).size, 1);
+    assert.equal((await app.store.list("summaries")).filter((item) => item.runId === "concurrent-identical-run").length, 1);
+    const deduplicatedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(reapprovedFeed.data.nextCursor)}`);
+    assert.equal(deduplicatedFeed.data.items.length, 1, "Concurrent retries must publish one HAI item");
+
     const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
       Authorization: `Bearer ${token}`
     });

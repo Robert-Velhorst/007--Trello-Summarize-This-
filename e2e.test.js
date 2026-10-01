@@ -104,12 +104,15 @@ async function main() {
     const removedMember = await call(baseUrl, "DELETE", `/api/workspaces/${workspaceId}/members/${member.data.user.id}`, {}, owner.data.token);
     assert.equal(removedMember.status, 200);
     assert.equal((await call(baseUrl, "GET", `/api/workspaces/${workspaceId}/summaries`, undefined, member.data.token)).status, 403);
-    const reviewed = await call(baseUrl, "POST", "/api/summaries/reviewed", {
+    const reviewedSaves = await Promise.all([0, 1, 2].map(() => call(baseUrl, "POST", "/api/summaries/reviewed", {
       reviewed: true, haiApproved: true, title: "Reviewed end-to-end summary",
       content: "Owner reviewed this exact summary and approved it for HAI.",
       sourceUri: "https://trello.com/c/e2e123/verified-summary", runId: "e2e-reviewed"
-    }, owner.data.token);
-    assert.equal(reviewed.status, 201);
+    }, owner.data.token)));
+    assert.deepEqual(reviewedSaves.map((result) => result.status).sort(), [200, 200, 201]);
+    assert.equal(new Set(reviewedSaves.map((result) => result.data.summary.id)).size, 1);
+    const reviewed = reviewedSaves.find((result) => result.status === 201);
+    assert.equal((await runtime.app.store.list("summaries")).filter((item) => item.runId === "e2e-reviewed").length, 1);
     const privateSummary = await call(baseUrl, "POST", "/api/summaries/reviewed", {
       reviewed: true, haiApproved: false, title: "Private summary", content: "Not approved for HAI.", runId: "e2e-private"
     }, owner.data.token);
