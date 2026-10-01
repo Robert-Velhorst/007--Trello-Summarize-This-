@@ -464,7 +464,7 @@ node test.js && node backend.test.js
 npm run test:all
 ```
 
-Runs the core, static package, local HTTP allowlist, frontend logout, worker lifecycle, backend, transfer, operations, HTTP E2E, large dataset, PostgreSQL, adversarial, and evaluation suites.
+Runs the core, static package, local HTTP allowlist, frontend logout, worker lifecycle, HTTP error containment, backend, transfer, operations, HTTP E2E, large dataset, PostgreSQL, adversarial, and evaluation suites.
 
 Without `TEST_DATABASE_URL`, the HTTP E2E test uses isolated local-file storage; PostgreSQL-only checks report that they are skipped. With that variable set, the E2E test uses PostgreSQL and verifies automatic processing by the integrated worker, reviewed-summary persistence, private HAI feed isolation, session and connector survival across a backend restart, approval revocation and logout. Provider credentials and proxy configuration are cleared inside this synthetic test process; it does not need paid AI services. The transfer and PostgreSQL suites also exercise the real database.
 
@@ -486,6 +486,7 @@ node static-site.test.js
 node local-dev-server.test.js
 node frontend-backend.test.js
 node worker-runtime.test.js
+node backend-http-error.test.js
 node postgres-snapshot.test.js
 node backend.test.js
 node backend-transfer.test.js

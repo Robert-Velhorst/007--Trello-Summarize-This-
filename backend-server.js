@@ -63,9 +63,20 @@ async function startBackendServer(options = {}) {
   try {
     app = await createBackendApp(normalizedOptions);
     const server = http.createServer((req, res) => {
-      Promise.resolve(app.handle(req, res)).catch((error) => {
-        console.error(`Unhandled backend request failure: ${error.message}`);
-        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      return Promise.resolve().then(() => app.handle(req, res)).catch(() => {
+        console.error("Unhandled backend request failure; returning a sanitized error or closing the incomplete response.");
+        if (res.destroyed || res.writableEnded) return;
+        if (res.headersSent) {
+          res.destroy();
+          return;
+        }
+        res.writeHead(500, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Referrer-Policy": "no-referrer"
+        });
         res.end(JSON.stringify({ success: false, error: "Internal server error" }));
       });
     });

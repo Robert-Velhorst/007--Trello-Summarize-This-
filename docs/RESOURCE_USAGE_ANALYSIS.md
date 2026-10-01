@@ -22,7 +22,7 @@ Local 2026-10-01 results:
 - Deferred attachment processor: 41.4 KB.
 - Static runtime files: 631.5 KB, excluding the backend executable and installer overhead.
 - Repository source footprint at measurement time: 2.67 MB, excluding `.git`, `.tmp`, `.npm-cache`, `dist` and `node_modules`. This changes as documentation and source files are edited.
-- Windows installer rebuilt on 2026-10-01: 22,041,088 bytes, including the packaged Node backend and latest worker lifecycle fixes. It is unsigned. The historical 357,888-byte figure described an older package and is not representative of this build.
+- Windows installer rebuilt on 2026-10-01: 22,041,600 bytes, including the packaged Node backend and HTTP error-containment fix. It is unsigned. The historical 357,888-byte figure described an older package and is not representative of this build.
 - Large-card AI prompt after caps: 19,701 characters.
 - Large-card prompt comments included: 12.
 - Longest included comment: 700 characters.

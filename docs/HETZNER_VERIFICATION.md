@@ -89,7 +89,7 @@ Checked on 2026-10-01:
 - `npm.cmd run build:windows-backend` produced the backend executable. The packager warned that the default local runtime store file does not exist in this clean worktree; no real store was supplied for packaging.
 - Fixed installer hashing to use streaming .NET SHA-256 without depending on the availability of PowerShell's `Get-FileHash` command.
 - Installer build staging now uses a unique, path-checked temporary directory per build.
-- `npm.cmd run test:windows-payload` completed and produced `dist/windows-installer/SummarizeThisSetup.exe` (22,041,088 bytes after the latest worker lifecycle fixes).
+- `npm.cmd run test:windows-payload` completed and produced `dist/windows-installer/SummarizeThisSetup.exe` (22,041,600 bytes after the HTTP error-containment fix).
 - The inspected payload exactly matches the static runtime manifest plus the four launcher/install scripts and packaged backend executable.
 - The generated installer is unsigned. This is not a signed Windows release.
 - Execution of the packaged backend for a runtime smoke check was rejected by the execution policy before it ran. Installation, first launch and installed-backend behavior remain unverified in this pass.
@@ -106,3 +106,16 @@ Commit `9f562519cd7126992029e933cab14399a7a7e48d` passed the [pull-request CI ru
 - The installer artifact was uploaded by CI and remains unsigned. No production Windows data was used or changed by these isolated runner tests.
 
 This adds independent runtime evidence beyond the locally blocked executable smoke check above. It does not resolve the production SSH, domain, deployment, transfer, Trello or HAI-consumer acceptance gaps.
+
+## HTTP Error Containment
+
+Checked on 2026-10-01 with `backend-http-error.test.js`:
+
+- A controlled synchronous handler failure reproduced an exception escaping the HTTP callback before the fix. Handler invocation now happens inside the promise boundary, covering both immediate throws and rejected promises.
+- The last-resort handler returns a generic, non-cacheable JSON 500 only while headers remain unsent. A partially sent response is destroyed instead of attempting to write a second response; closed or ended responses are left alone.
+- Unexpected exception messages are not printed by this last-resort handler, avoiding credential disclosure through that log path.
+- Tests exercise the current server source with controlled application dependencies and a real loopback HTTP listener. They verify a failed response, interruption after actual headers have arrived, rejection of the incomplete body, and a successful subsequent request to the same server.
+- The complete local suite passed after the runtime fix, with PostgreSQL explicitly skipped because `TEST_DATABASE_URL` was unset. The new test is also included in the Node 20/22 GitHub gates; their result for this later code change must be checked independently of the earlier acceptance run.
+- The Windows backend and installer were rebuilt after the fix. The inspected installer's packaged backend SHA-256 matches the rebuilt executable.
+
+These checks cover the outer server boundary, not every route's behavior under every possible database or network failure.
