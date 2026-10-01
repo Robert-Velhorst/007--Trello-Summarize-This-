@@ -180,3 +180,9 @@ Low. The Power-Up reads card, board, list, and settings data on demand. Badge re
 - Add Cloudflare WAF or managed rate limiting in front of the optional proxy endpoint for durable global quotas beyond the Worker-local per-client burst guard.
 - Add explicit provider-response caching if repeated identical prompts become common and privacy policy allows it.
 - Split the standalone `index.html` demo from the production install if the installer should become even smaller.
+
+## Windows CI Resource Probe (2026-10-01)
+
+The packaged backend probe in [GitHub CI run 36853320469](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/actions/runs/36853320469/job/110339831197) recorded a 45,113,344-byte working set, 54,841,344-byte private memory size, 31 ms of process CPU time for 100 sequential health requests, and 16 threads after the probe. Measurements used a fresh synthetic local store on a GitHub Windows runner after startup and a short idle delay.
+
+This is a single observation, not a peak-memory limit, response-time benchmark, summarization workload, or Hetzner capacity estimate. It does not measure Trello/browser memory, external providers, long-lived data growth, or production traffic. Repeat representative workloads on the target host before setting production resource limits.

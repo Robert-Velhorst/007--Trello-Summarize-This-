@@ -1,6 +1,6 @@
 # Hetzner Migration Verification
 
-Last checked: 2026-10-01. These are local checks, not proof of a deployed service.
+Last checked: 2026-10-01. These are local and GitHub CI checks, not proof of a deployed service.
 
 ## Passed
 
@@ -93,3 +93,16 @@ Checked on 2026-10-01:
 - The inspected payload exactly matches the static runtime manifest plus the four launcher/install scripts and packaged backend executable.
 - The generated installer is unsigned. This is not a signed Windows release.
 - Execution of the packaged backend for a runtime smoke check was rejected by the execution policy before it ran. Installation, first launch and installed-backend behavior remain unverified in this pass.
+
+## Independent GitHub CI Acceptance
+
+Commit `9f562519cd7126992029e933cab14399a7a7e48d` passed the [pull-request CI run](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/actions/runs/36853320469) on 2026-10-01. The separate push-triggered run also passed.
+
+- Node 20 and Node 22 ran the full set of regression gates against PostgreSQL 17, including the new transfer, worker-lifecycle, frontend logout, local-server and immutable-snapshot tests.
+- Container build and documentation integrity gates passed. The separate [CodeQL workflow](https://github.com/Robert-Velhorst/007--Trello-Summarize-This-/actions/runs/36853320456) completed successfully; this is not a guarantee that no vulnerabilities remain.
+- The packaged backend executable actually started and answered 100 health requests on the GitHub Windows runner.
+- Installer payload verification, installation, installed backend startup, default-port collision avoidance, private-file access restrictions, current-user-only settings/data ACL checks, upgrade with retained account data and settings, and uninstall passed.
+- The installation test invokes the extracted `install.ps1` payload. It does not simulate a person double-clicking the installer wrapper, SmartScreen interaction, or Trello's iframe on Robert's Windows 11 computer.
+- The installer artifact was uploaded by CI and remains unsigned. No production Windows data was used or changed by these isolated runner tests.
+
+This adds independent runtime evidence beyond the locally blocked executable smoke check above. It does not resolve the production SSH, domain, deployment, transfer, Trello or HAI-consumer acceptance gaps.
