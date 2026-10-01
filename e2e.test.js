@@ -145,6 +145,23 @@ async function main() {
     const revocation = await call(baseUrl, "POST", `/api/summaries/${reviewed.data.summary.id}/hai-approval`, { approved: false }, owner.data.token);
     assert.equal(revocation.status, 200);
     assert.deepEqual((await call(baseUrl, "GET", connector.data.feedPath)).data.items, []);
+    const retainedClock = "2040-01-01T00:00:00.000Z";
+    await runtime.app.store.transaction((state) => {
+      state.meta.haiCursorTime = Date.parse(retainedClock);
+      state.summaries = [];
+    });
+    await runtime.shutdown();
+    runtime = await startBackendServer(options);
+    baseUrl = `http://127.0.0.1:${runtime.server.address().port}`;
+    const afterRetention = await call(baseUrl, "POST", "/api/summaries/reviewed", {
+      reviewed: true, haiApproved: true, title: "Approval after retention", content: "New reviewed content", runId: "e2e-after-retention"
+    }, owner.data.token);
+    assert.equal(afterRetention.status, 201);
+    const retainedPage = await call(baseUrl, "GET", `${connector.data.feedPath}?cursor=${encodeURIComponent(retainedClock + "|previous-record")}`);
+    assert.equal(retainedPage.status, 200);
+    assert.deepEqual(retainedPage.data.items.map((item) => item.externalId), [`summarize-this:${afterRetention.data.summary.id}`]);
+    assert.ok(retainedPage.data.nextCursor > retainedClock + "|previous-record");
+    assert.equal(retainedPage.data.items[0].receivedAt, afterRetention.data.summary.haiApprovedAt);
     assert.equal((await call(baseUrl, "POST", "/api/auth/logout", {}, owner.data.token)).status, 200);
     assert.equal((await call(baseUrl, "GET", "/api/user/profile", undefined, owner.data.token)).status, 401);
   } finally {

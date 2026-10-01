@@ -86,7 +86,32 @@ function sanitizeTrelloSourceUri(value) {
 }
 
 function connectorCursor(summary) {
-  return `${String(summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+  return `${String(summary.haiCursorAt || summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+}
+
+function markHaiApproval(state, record) {
+  let lastTime = Number.isSafeInteger(state.meta.haiCursorTime) ? state.meta.haiCursorTime : 0;
+  // Include legacy records and retained revoked timestamps when bootstrapping the clock.
+  for (const summary of state.summaries) {
+    const cursorTime = Date.parse(summary.haiCursorAt || summary.haiApprovedAt || "");
+    if (Number.isFinite(cursorTime)) lastTime = Math.max(lastTime, cursorTime);
+  }
+  const nextTime = Math.max(Date.now(), lastTime + 1);
+  const cursorAt = new Date(nextTime).toISOString();
+  state.meta.haiCursorTime = nextTime;
+  record.haiApprovedAt = nowIso();
+  record.haiCursorAt = cursorAt;
+}
+
+function setSummaryHaiApproval(store, id, userId, approved) {
+  return store.transaction((state) => {
+    const record = state.summaries.find((item) => item.id === id && item.userId === userId);
+    if (!record) return null;
+    if (approved && !record.haiApprovedAt) markHaiApproval(state, record);
+    else if (!approved) record.haiApprovedAt = null;
+    record.updatedAt = nowIso();
+    return record;
+  });
 }
 
 function truncateUtf8(value, maxBytes) {
@@ -970,27 +995,36 @@ async function route(req, res, store, adminPasswordRecord) {
         : null;
       if (existing) {
         const updated = body.haiApproved === true && !existing.haiApprovedAt
-          ? await store.updateRecord("summaries", existing.id, (record) => { record.haiApprovedAt = nowIso(); })
+          ? await setSummaryHaiApproval(store, existing.id, context.user.id, true)
           : existing;
+        if (!updated) return { status: 404, payload: { success: false, error: "Summary not found" } };
         return { status: 200, payload: { success: true, summary: cleanSummaryForUser(updated), existing: true } };
       }
-      const summary = await store.add("summaries", {
-        id: createId("summary"),
-        userId: context.user.id,
-        workspaceId: context.user.workspaceId,
-        title: String(body.title).trim().slice(0, 300),
-        summary: String(body.content).trim().slice(0, 100_000),
-        sourceUri,
-        cardId: String(body.cardId || "").trim().slice(0, 160),
-        runId,
-        projectKey: String(body.projectKey || "trello-summaries").trim().slice(0, 120),
-        method: "reviewed-import",
-        providerMode: String(body.providerMode || "local").trim().slice(0, 80),
-        confidence: Math.max(0, Math.min(1, Number(body.confidence || 0))),
-        reviewedAt: nowIso(),
-        haiApprovedAt: body.haiApproved === true ? nowIso() : null,
-        creditsUsed: 0
-      }, { limit: 1000 });
+      const summary = await store.transaction((state) => {
+        const record = {
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          id: createId("summary"),
+          userId: context.user.id,
+          workspaceId: context.user.workspaceId,
+          title: String(body.title).trim().slice(0, 300),
+          summary: String(body.content).trim().slice(0, 100_000),
+          sourceUri,
+          cardId: String(body.cardId || "").trim().slice(0, 160),
+          runId,
+          projectKey: String(body.projectKey || "trello-summaries").trim().slice(0, 120),
+          method: "reviewed-import",
+          providerMode: String(body.providerMode || "local").trim().slice(0, 80),
+          confidence: Math.max(0, Math.min(1, Number(body.confidence || 0))),
+          reviewedAt: nowIso(),
+          haiApprovedAt: null,
+          creditsUsed: 0
+        };
+        if (body.haiApproved === true) markHaiApproval(state, record);
+        state.summaries.unshift(record);
+        state.summaries = state.summaries.slice(0, 1000);
+        return record;
+      });
       await appendEvent(store, "summary.reviewed_saved", {
         userId: context.user.id,
         summaryId: summary.id,
@@ -1016,9 +1050,11 @@ async function route(req, res, store, adminPasswordRecord) {
       json(res, 404, { success: false, error: "Summary not found" });
       return;
     }
-    const updated = await store.updateRecord("summaries", summary.id, (record) => {
-      record.haiApprovedAt = body.approved ? nowIso() : null;
-    });
+    const updated = await setSummaryHaiApproval(store, summary.id, context.user.id, body.approved);
+    if (!updated) {
+      json(res, 404, { success: false, error: "Summary not found" });
+      return;
+    }
     await appendEvent(store, body.approved ? "summary.hai_approved" : "summary.hai_revoked", {
       userId: context.user.id,
       summaryId: summary.id

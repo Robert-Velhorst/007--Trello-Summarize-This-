@@ -492,6 +492,61 @@ async function main() {
     assert.equal(oversizedFeed.data.nextCursor, undefined);
     await app.store.replace("summaries", (await app.store.list("summaries")).filter((item) => item.id !== oversizedId));
 
+    const priorCursorTime = "2040-01-01T00:00:00.000Z";
+    await app.store.add("summaries", {
+      id: "zz-prior-approval", userId: customRegister.data.user.id, summary: "Already delivered",
+      haiApprovedAt: priorCursorTime
+    });
+    await app.store.add("summaries", {
+      id: "aa-late-approval", userId: customRegister.data.user.id, summary: "Approved after the last feed read",
+      haiApprovedAt: null
+    });
+    const priorPage = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(priorCursorTime + "|")}`);
+    assert.equal(priorPage.data.items.length, 1);
+    const lateApproval = await requestJson(app, "POST", "/api/summaries/aa-late-approval/hai-approval", { approved: true }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(lateApproval.status, 200);
+    const laterPage = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(priorPage.data.nextCursor)}`);
+    assert.deepEqual(laterPage.data.items.map((item) => item.externalId), ["summarize-this:aa-late-approval"],
+      "An approval after a delivered page must not be lost if the wall clock is behind its prior cursor");
+    assert.equal(laterPage.data.items[0].receivedAt, lateApproval.data.summary.haiApprovedAt);
+    assert.ok(laterPage.data.nextCursor > priorPage.data.nextCursor);
+    await requestJson(app, "POST", "/api/summaries/aa-late-approval/hai-approval", { approved: true }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.deepEqual((await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(laterPage.data.nextCursor)}`)).data.items, [],
+      "Repeating an active approval must not republish unchanged content");
+    const ActualDate = global.Date;
+    const fixedTime = ActualDate.now();
+    let concurrentApprovals;
+    try {
+      global.Date = class extends ActualDate {
+        constructor(...args) { super(...(args.length ? args : [fixedTime])); }
+        static now() { return fixedTime; }
+      };
+      concurrentApprovals = await Promise.all([0, 1, 2].map((index) => requestJson(app, "POST", "/api/summaries/reviewed", {
+        reviewed: true, haiApproved: true, title: `Concurrent approval ${index}`, content: "Exact reviewed content",
+        runId: `concurrent-approval-${index}`
+      }, { Authorization: `Bearer ${token}` })));
+    } finally {
+      global.Date = ActualDate;
+    }
+    assert.ok(concurrentApprovals.every((result) => result.status === 201));
+    assert.equal(new Set(concurrentApprovals.map((result) => result.data.summary.haiApprovedAt)).size, 1);
+    const concurrentFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(laterPage.data.nextCursor)}`);
+    assert.equal(concurrentFeed.data.items.length, 3, "All same-millisecond approvals must be delivered");
+    const concurrentRecords = (await app.store.list("summaries")).filter((item) => /^concurrent-approval-/.test(item.runId || ""));
+    assert.equal(new Set(concurrentRecords.map((item) => item.haiCursorAt)).size, 3);
+    const targetRecord = concurrentRecords[0];
+    await requestJson(app, "POST", `/api/summaries/${targetRecord.id}/hai-approval`, { approved: false }, { Authorization: `Bearer ${token}` });
+    const reapproved = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true, haiApproved: true, title: "Concurrent approval", content: "Exact reviewed content", runId: targetRecord.runId
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(reapproved.status, 200);
+    const reapprovedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(concurrentFeed.data.nextCursor)}`);
+    assert.deepEqual(reapprovedFeed.data.items.map((item) => item.externalId), [`summarize-this:${targetRecord.id}`]);
+
     const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
       Authorization: `Bearer ${token}`
     });

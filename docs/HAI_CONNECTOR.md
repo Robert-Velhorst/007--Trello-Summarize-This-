@@ -72,7 +72,9 @@ The endpoint returns:
 }
 ```
 
-The format targets both HAI ingestion paths. `provider` and `itemType` use HAI account-feed enum values; optional metadata is omitted because HAI's Connected Sources and account-feed parsers use different metadata representations. HAI Connected Sources advances `nextCursor`, while the account-feed envelope reads `cursor`, so both names carry the same approval-time/ID value. A cursor-free request starts with the oldest approved page; subsequent requests use the last delivered record's cursor. The source-level check below covers decoding compatibility, not complete hosted ingestion.
+The format targets both HAI ingestion paths. `provider` and `itemType` use HAI account-feed enum values; optional metadata is omitted because HAI's Connected Sources and account-feed parsers use different metadata representations. HAI Connected Sources advances `nextCursor`, while the account-feed envelope reads `cursor`, so both names carry the same opaque approval-order/ID value. A cursor-free request starts with the oldest approved page; subsequent requests use the last delivered record's cursor. The source-level check below covers decoding compatibility, not complete hosted ingestion.
+
+New approvals use a strictly increasing logical timestamp for cursor ordering, allocated in the same store transaction as approval. The persisted high-water mark survives removal of old summaries and a backend restart. `receivedAt` remains the actual wall-clock approval time; do not infer real event times from the cursor. Existing records without a logical timestamp retain their legacy approval-time cursor until reapproved. Repeating an already-active approval does not republish unchanged content; revoking and then reapproving allocates a new cursor.
 
 ## Verify Against HAI Source
 

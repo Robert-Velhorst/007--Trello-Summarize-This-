@@ -89,7 +89,7 @@ Checked on 2026-10-01:
 - `npm.cmd run build:windows-backend` produced the backend executable. The packager warned that the default local runtime store file does not exist in this clean worktree; no real store was supplied for packaging.
 - Fixed installer hashing to use streaming .NET SHA-256 without depending on the availability of PowerShell's `Get-FileHash` command.
 - Installer build staging now uses a unique, path-checked temporary directory per build.
-- `npm.cmd run test:windows-payload` completed and produced `dist/windows-installer/SummarizeThisSetup.exe` (22,041,600 bytes after the HTTP error-containment fix).
+- `npm.cmd run test:windows-payload` completed and produced `dist/windows-installer/SummarizeThisSetup.exe` (22,042,624 bytes after the incremental approval-ordering fix).
 - The inspected payload exactly matches the static runtime manifest plus the four launcher/install scripts and packaged backend executable.
 - The generated installer is unsigned. This is not a signed Windows release.
 - Execution of the packaged backend for a runtime smoke check was rejected by the execution policy before it ran. Installation, first launch and installed-backend behavior remain unverified in this pass.
@@ -141,3 +141,17 @@ Captured source fingerprints for the passing probe:
 | `internal/source/service.go` | `1d0be508e46be2dfa3f78ed345b3add69696a312ae6a08522c4ea187b5283e15` |
 
 This is independent source-level compatibility evidence, not a live HAI connection. Capability/approval revocation prevents future reads but does not delete data HAI already imported.
+
+## Incremental Approval Ordering
+
+Checked on 2026-10-01:
+
+- A regression test reproduced a newly approved summary disappearing from incremental reads when its wall-clock approval time was behind the last delivered cursor.
+- New approvals now atomically allocate a logical cursor timestamp above both the persisted high-water mark and retained legacy cursor timestamps. Actual approval time is kept separately in `haiApprovedAt` and the feed's `receivedAt` field.
+- Three concurrent approvals under a frozen wall clock produce distinct cursor timestamps and are all delivered. Repeating an active approval does not produce a new feed item; revocation and reapproval through reviewed-save produce a later cursor.
+- The HTTP E2E scenario persists a synthetic high-water mark, removes old summary rows, shuts down and reopens the store, then verifies a new approval is delivered after the prior cursor. The default local-store run passed. GitHub's PostgreSQL run for this revision must be checked separately.
+- The full local suite passed; PostgreSQL was explicitly skipped in this local invocation. Legacy feed cursors and capability URLs are preserved.
+
+- The actual HAI parser/schema probe passed again after this change. The Windows backend and installer were rebuilt, and the inspected installer's backend hash matches the rebuilt executable.
+
+The logical cursor clock is scoped to the existing single-writer store. This does not introduce multi-instance write support or prove live HAI ingestion. Existing records are scanned when allocating a cursor; normal reviewed saves retain up to 1,000 records, but imported legacy collections may be larger. Target-host latency under sustained load remains unmeasured.
