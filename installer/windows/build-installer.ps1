@@ -6,7 +6,11 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $DistDir = Join-Path $RepoRoot "dist\windows-installer"
-$BuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "SummarizeThisInstallerBuild"
+$TempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$BuildRoot = Join-Path $TempRoot ("SummarizeThisInstallerBuild-" + [Guid]::NewGuid().ToString("N"))
+if (-not ([System.IO.Path]::GetFullPath($BuildRoot)).StartsWith($TempRoot.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Installer build directory must stay inside the temporary directory."
+}
 $StagingDir = Join-Path $BuildRoot "staging"
 $PayloadZip = Join-Path $BuildRoot "payload.zip"
 $SourcePath = Join-Path $BuildRoot "SummarizeThisSetup.cs"
@@ -92,7 +96,14 @@ try {
 
   Compress-Archive -Path (Join-Path $StagingDir "*") -DestinationPath $PayloadZip -Force
 
-  $payloadHash = (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash
+  $hashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+  $payloadStream = [System.IO.File]::OpenRead($PayloadZip)
+  try {
+    $payloadHash = [System.BitConverter]::ToString($hashAlgorithm.ComputeHash($payloadStream)).Replace("-", "")
+  } finally {
+    $payloadStream.Dispose()
+    $hashAlgorithm.Dispose()
+  }
   $source = @"
 using System;
 using System.Diagnostics;

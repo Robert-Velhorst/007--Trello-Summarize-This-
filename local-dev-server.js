@@ -4,6 +4,7 @@ const path = require("node:path");
 const { URL } = require("node:url");
 
 const ROOT = __dirname;
+const PUBLIC_FILES = new Set(require("./runtime-files.json").map((file) => path.resolve(ROOT, file)));
 const PORT = Number(process.env.PORT || 17117);
 const HOST = process.env.HOST || "127.0.0.1";
 
@@ -26,7 +27,7 @@ function safePathname(requestUrl) {
     const parsed = new URL(requestUrl, `http://${HOST}:${PORT}`);
     const pathname = decodeURIComponent(parsed.pathname).replace(/\\/g, "/");
     const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
-    return normalized === "/" ? "/index.html" : normalized;
+    return normalized === path.sep || normalized === "/" ? "/index.html" : normalized;
   } catch (_error) {
     return null;
   }
@@ -42,7 +43,7 @@ function resolveFile(requestUrl) {
   if (!pathname) return null;
   const resolved = path.resolve(ROOT, `.${pathname}`);
 
-  if (!isPathInsideRoot(resolved)) {
+  if (!isPathInsideRoot(resolved) || !PUBLIC_FILES.has(resolved)) {
     return null;
   }
 
@@ -82,13 +83,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method !== "GET") {
+    send(res, 405, { "Content-Type": "text/plain; charset=utf-8", "Allow": "GET, OPTIONS" }, "Method Not Allowed");
+    return;
+  }
+
   const filePath = resolveFile(req.url || "/");
   if (!filePath) {
     send(res, 403, { "Content-Type": "text/plain; charset=utf-8" }, "Forbidden");
     return;
   }
 
-  fs.stat(filePath, (statError, stat) => {
+  fs.lstat(filePath, (statError, stat) => {
     if (statError || !stat.isFile()) {
       send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found");
       return;
@@ -109,7 +115,9 @@ const server = http.createServer((req, res) => {
     }
 
     res.writeHead(200, headers);
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", () => res.destroy());
+    stream.pipe(res);
   });
 });
 
@@ -126,8 +134,9 @@ function startLocalServer() {
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   server.listen(PORT, HOST, () => {
-    console.log(`Summarize This local server running at http://${HOST}:${PORT}/`);
-    console.log(`Open http://${HOST}:${PORT}/connector.html for the Trello connector entrypoint.`);
+    const port = server.address().port;
+    console.log(`Summarize This local server running at http://${HOST}:${port}/`);
+    console.log(`Open http://${HOST}:${port}/connector.html for the Trello connector entrypoint.`);
   });
   return server;
 }

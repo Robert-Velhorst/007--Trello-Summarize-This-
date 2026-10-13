@@ -443,6 +443,120 @@ async function main() {
     assert.equal(recurringSecondPage.data.items.at(-1).externalId, "summarize-this:recurring-104");
     assert.equal(recurringSecondPage.data.cursor, "2030-01-01T01:44:00.000Z|recurring-104");
 
+    const tiedApprovalTime = "2031-01-01T00:00:00.000Z";
+    const tiedIds = ["tied-a", "tied-A", "tied_0"].sort();
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat(tiedIds.map((id) => ({
+      id, userId: customRegister.data.user.id, summary: id, haiApprovedAt: tiedApprovalTime
+    }))));
+    let tiedCursor = `${tiedApprovalTime}|`;
+    const deliveredIds = [];
+    for (let index = 0; index < tiedIds.length + 1; index++) {
+      const page = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?limit=1&cursor=${encodeURIComponent(tiedCursor)}`);
+      assert.equal(page.status, 200);
+      deliveredIds.push(...page.data.items.map((item) => item.externalId.replace("summarize-this:", "")));
+      tiedCursor = page.data.nextCursor;
+    }
+    assert.deepEqual(deliveredIds, tiedIds, "HAI pagination must use the same ordering for sorting and cursor filtering");
+
+    const largeApprovalTime = "2032-01-01T00:00:00.000Z";
+    const largeIds = Array.from({ length: 7 }, (_, index) => `large-feed-${index}`);
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat(largeIds.map((id, index) => ({
+      id, userId: customRegister.data.user.id, haiApprovedAt: largeApprovalTime,
+      summary: index === 6 ? "\uD83D\uDE00".repeat(25001) : "<>&".repeat(33333)
+    }))));
+    let largeCursor = `${largeApprovalTime}|`;
+    const deliveredLargeIds = [];
+    for (let index = 0; index < largeIds.length + 1; index++) {
+      const page = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(largeCursor)}`);
+      assert.equal(page.status, 200);
+      assert.ok(Buffer.byteLength(page.text, "utf8") <= 1536 * 1024, "Final escaped HAI response must respect its byte budget");
+      for (const item of page.data.items) {
+        deliveredLargeIds.push(item.externalId.replace("summarize-this:", ""));
+        if (item.externalId.endsWith("large-feed-6")) {
+          assert.equal(Buffer.byteLength(item.content, "utf8"), 100000);
+          assert.equal(item.content.endsWith("\uD83D\uDE00"), true);
+        }
+      }
+      largeCursor = page.data.nextCursor;
+      if (!page.data.items.length) break;
+    }
+    assert.deepEqual(deliveredLargeIds, largeIds, "Byte-limited HAI pages must deliver all remaining records");
+    const oversizedId = "oversized-feed-" + "x".repeat(1536 * 1024);
+    await app.store.replace("summaries", (await app.store.list("summaries")).concat([{
+      id: oversizedId, userId: customRegister.data.user.id, summary: "Legacy oversized identifier",
+      haiApprovedAt: "2033-01-01T00:00:00.000Z"
+    }]));
+    const oversizedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent("2033-01-01T00:00:00.000Z|")}`);
+    assert.equal(oversizedFeed.status, 422);
+    assert.ok(Buffer.byteLength(oversizedFeed.text, "utf8") < 1024);
+    assert.equal(oversizedFeed.data.nextCursor, undefined);
+    await app.store.replace("summaries", (await app.store.list("summaries")).filter((item) => item.id !== oversizedId));
+
+    const priorCursorTime = "2040-01-01T00:00:00.000Z";
+    await app.store.add("summaries", {
+      id: "zz-prior-approval", userId: customRegister.data.user.id, summary: "Already delivered",
+      haiApprovedAt: priorCursorTime
+    });
+    await app.store.add("summaries", {
+      id: "aa-late-approval", userId: customRegister.data.user.id, summary: "Approved after the last feed read",
+      haiApprovedAt: null
+    });
+    const priorPage = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(priorCursorTime + "|")}`);
+    assert.equal(priorPage.data.items.length, 1);
+    const lateApproval = await requestJson(app, "POST", "/api/summaries/aa-late-approval/hai-approval", { approved: true }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(lateApproval.status, 200);
+    const laterPage = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(priorPage.data.nextCursor)}`);
+    assert.deepEqual(laterPage.data.items.map((item) => item.externalId), ["summarize-this:aa-late-approval"],
+      "An approval after a delivered page must not be lost if the wall clock is behind its prior cursor");
+    assert.equal(laterPage.data.items[0].receivedAt, lateApproval.data.summary.haiApprovedAt);
+    assert.ok(laterPage.data.nextCursor > priorPage.data.nextCursor);
+    await requestJson(app, "POST", "/api/summaries/aa-late-approval/hai-approval", { approved: true }, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.deepEqual((await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(laterPage.data.nextCursor)}`)).data.items, [],
+      "Repeating an active approval must not republish unchanged content");
+    const ActualDate = global.Date;
+    const fixedTime = ActualDate.now();
+    let concurrentApprovals;
+    try {
+      global.Date = class extends ActualDate {
+        constructor(...args) { super(...(args.length ? args : [fixedTime])); }
+        static now() { return fixedTime; }
+      };
+      concurrentApprovals = await Promise.all([0, 1, 2].map((index) => requestJson(app, "POST", "/api/summaries/reviewed", {
+        reviewed: true, haiApproved: true, title: `Concurrent approval ${index}`, content: "Exact reviewed content",
+        runId: `concurrent-approval-${index}`
+      }, { Authorization: `Bearer ${token}` })));
+    } finally {
+      global.Date = ActualDate;
+    }
+    assert.ok(concurrentApprovals.every((result) => result.status === 201));
+    assert.equal(new Set(concurrentApprovals.map((result) => result.data.summary.haiApprovedAt)).size, 1);
+    const concurrentFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(laterPage.data.nextCursor)}`);
+    assert.equal(concurrentFeed.data.items.length, 3, "All same-millisecond approvals must be delivered");
+    const concurrentRecords = (await app.store.list("summaries")).filter((item) => /^concurrent-approval-/.test(item.runId || ""));
+    assert.equal(new Set(concurrentRecords.map((item) => item.haiCursorAt)).size, 3);
+    const targetRecord = concurrentRecords[0];
+    await requestJson(app, "POST", `/api/summaries/${targetRecord.id}/hai-approval`, { approved: false }, { Authorization: `Bearer ${token}` });
+    const reapproved = await requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true, haiApproved: true, title: "Concurrent approval", content: "Exact reviewed content", runId: targetRecord.runId
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(reapproved.status, 200);
+    const reapprovedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(concurrentFeed.data.nextCursor)}`);
+    assert.deepEqual(reapprovedFeed.data.items.map((item) => item.externalId), [`summarize-this:${targetRecord.id}`]);
+
+    const duplicateSaves = await Promise.all([0, 1, 2].map(() => requestJson(app, "POST", "/api/summaries/reviewed", {
+      reviewed: true, haiApproved: true, title: "One reviewed run", content: "Save this exact content once",
+      runId: "concurrent-identical-run"
+    }, { Authorization: `Bearer ${token}` })));
+    assert.deepEqual(duplicateSaves.map((result) => result.status).sort(), [200, 200, 201]);
+    assert.equal(new Set(duplicateSaves.map((result) => result.data.summary.id)).size, 1);
+    assert.equal((await app.store.list("summaries")).filter((item) => item.runId === "concurrent-identical-run").length, 1);
+    const deduplicatedFeed = await requestJson(app, "GET", `${firstHaiToken.data.feedPath}?cursor=${encodeURIComponent(reapprovedFeed.data.nextCursor)}`);
+    assert.equal(deduplicatedFeed.data.items.length, 1, "Concurrent retries must publish one HAI item");
+
     const rotatedHaiToken = await requestJson(app, "POST", "/api/integrations/hai/token", {}, {
       Authorization: `Bearer ${token}`
     });
@@ -454,6 +568,19 @@ async function main() {
     });
     assert.equal(revokedHaiToken.status, 200);
     assert.equal((await requestJson(app, "GET", rotatedHaiToken.data.feedPath)).status, 404);
+
+    const parallelTokens = await Promise.all([token, secondaryRegister.data.token].map((sessionToken) =>
+      requestJson(app, "POST", "/api/integrations/hai/token", {}, { Authorization: `Bearer ${sessionToken}` })
+    ));
+    for (const issued of parallelTokens) {
+      assert.equal(issued.status, 201);
+      assert.equal((await requestJson(app, "GET", issued.data.feedPath)).status, 200,
+        "Concurrent token creation for different users must preserve both capabilities");
+    }
+    await Promise.all([token, secondaryRegister.data.token].map((sessionToken) =>
+      requestJson(app, "DELETE", "/api/integrations/hai/token", undefined, { Authorization: `Bearer ${sessionToken}` })
+    ));
+    for (const issued of parallelTokens) assert.equal((await requestJson(app, "GET", issued.data.feedPath)).status, 404);
 
     const credits = await requestJson(app, "GET", "/api/user/credits", undefined, {
       Authorization: `Bearer ${token}`

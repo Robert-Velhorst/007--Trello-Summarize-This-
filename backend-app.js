@@ -23,15 +23,18 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function encodeJson(payload) {
+  return JSON.stringify(payload).replace(/[<>&\u2028\u2029]/g, (character) => {
+    return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+  });
+}
+
 function json(res, status, payload, headers) {
   res.writeHead(status, Object.assign({
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   }, headers || {}));
-  const body = JSON.stringify(payload).replace(/[<>&\u2028\u2029]/g, (character) => {
-    return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
-  });
-  res.end(body);
+  res.end(encodeJson(payload));
 }
 
 function text(res, status, body) {
@@ -83,7 +86,32 @@ function sanitizeTrelloSourceUri(value) {
 }
 
 function connectorCursor(summary) {
-  return `${String(summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+  return `${String(summary.haiCursorAt || summary.haiApprovedAt || "")}|${String(summary.id || "")}`;
+}
+
+function markHaiApproval(state, record) {
+  let lastTime = Number.isSafeInteger(state.meta.haiCursorTime) ? state.meta.haiCursorTime : 0;
+  // Include legacy records and retained revoked timestamps when bootstrapping the clock.
+  for (const summary of state.summaries) {
+    const cursorTime = Date.parse(summary.haiCursorAt || summary.haiApprovedAt || "");
+    if (Number.isFinite(cursorTime)) lastTime = Math.max(lastTime, cursorTime);
+  }
+  const nextTime = Math.max(Date.now(), lastTime + 1);
+  const cursorAt = new Date(nextTime).toISOString();
+  state.meta.haiCursorTime = nextTime;
+  record.haiApprovedAt = nowIso();
+  record.haiCursorAt = cursorAt;
+}
+
+function setSummaryHaiApproval(store, id, userId, approved) {
+  return store.transaction((state) => {
+    const record = state.summaries.find((item) => item.id === id && item.userId === userId);
+    if (!record) return null;
+    if (approved && !record.haiApprovedAt) markHaiApproval(state, record);
+    else if (!approved) record.haiApprovedAt = null;
+    record.updatedAt = nowIso();
+    return record;
+  });
 }
 
 function truncateUtf8(value, maxBytes) {
@@ -740,27 +768,41 @@ async function route(req, res, store, adminPasswordRecord) {
     const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 100) || 100));
     const approved = (await store.list("summaries"))
       .filter((item) => item.userId === token.userId && item.haiApprovedAt && connectorCursor(item) > requestedCursor)
-      .sort((left, right) => connectorCursor(left).localeCompare(connectorCursor(right)));
+      .sort((left, right) => {
+        const leftCursor = connectorCursor(left);
+        const rightCursor = connectorCursor(right);
+        return leftCursor < rightCursor ? -1 : leftCursor > rightCursor ? 1 : 0;
+      });
     const page = approved.slice(0, limit);
-    const items = page.map((item) => ({
-      externalId: `summarize-this:${item.id}`,
-      title: String(item.title || "Reviewed Trello summary").slice(0, 300),
-      content: truncateUtf8(item.summary, 100_000),
-      sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
-      itemType: "card",
-      provider: "trello",
-      accountLabel: "summarize-this",
-      projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
-      receivedAt: item.haiApprovedAt
-    }));
-    while (items.length > 1) {
-      const candidateCursor = connectorCursor(page[items.length - 1]);
-      if (Buffer.byteLength(JSON.stringify({ items, cursor: candidateCursor, nextCursor: candidateCursor }), "utf8") <= HAI_FEED_MAX_BYTES) break;
-      items.pop();
+    const items = [];
+    let itemBytes = 0;
+    let responseCursor = requestedCursor;
+    for (const item of page) {
+      const feedItem = {
+        externalId: `summarize-this:${item.id}`,
+        title: String(item.title || "Reviewed Trello summary").slice(0, 300),
+        content: truncateUtf8(item.summary, 100_000),
+        sourceUri: sanitizeTrelloSourceUri(item.sourceUri),
+        itemType: "card",
+        provider: "trello",
+        accountLabel: "summarize-this",
+        projectKey: String(item.projectKey || "trello-summaries").slice(0, 120),
+        receivedAt: item.haiApprovedAt
+      };
+      const candidateCursor = connectorCursor(item);
+      const candidateBytes = itemBytes + (items.length ? 1 : 0) + Buffer.byteLength(encodeJson(feedItem), "utf8");
+      const envelopeBytes = Buffer.byteLength(encodeJson({ items: [], cursor: candidateCursor, nextCursor: candidateCursor }), "utf8");
+      if (candidateBytes + envelopeBytes > HAI_FEED_MAX_BYTES) {
+        if (!items.length) {
+          json(res, 422, { error: "A HAI feed record exceeds the response byte limit." });
+          return;
+        }
+        break;
+      }
+      items.push(feedItem);
+      itemBytes = candidateBytes;
+      responseCursor = candidateCursor;
     }
-    const responseCursor = items.length
-      ? connectorCursor(page[items.length - 1])
-      : requestedCursor;
     await store.updateRecord("haiTokens", token.id, (record) => {
       record.lastUsedAt = nowIso();
     });
@@ -948,32 +990,45 @@ async function route(req, res, store, adminPasswordRecord) {
     const sourceUri = sanitizeTrelloSourceUri(body.sourceUri);
     const runId = String(body.runId || "").trim().slice(0, 160);
     const response = await withIdempotency(req, store, `reviewed-summary:${context.user.id}`, async () => {
-      const existing = runId
-        ? (await store.list("summaries")).find((item) => item.userId === context.user.id && item.runId === runId)
-        : null;
-      if (existing) {
-        const updated = body.haiApproved === true && !existing.haiApprovedAt
-          ? await store.updateRecord("summaries", existing.id, (record) => { record.haiApprovedAt = nowIso(); })
-          : existing;
-        return { status: 200, payload: { success: true, summary: cleanSummaryForUser(updated), existing: true } };
+      const saved = await store.transaction((state) => {
+        const existing = runId
+          ? state.summaries.find((item) => item.userId === context.user.id && item.runId === runId)
+          : null;
+        if (existing) {
+          if (body.haiApproved === true && !existing.haiApprovedAt) {
+            markHaiApproval(state, existing);
+            existing.updatedAt = nowIso();
+          }
+          return { summary: existing, existing: true };
+        }
+        const record = {
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          id: createId("summary"),
+          userId: context.user.id,
+          workspaceId: context.user.workspaceId,
+          title: String(body.title).trim().slice(0, 300),
+          summary: String(body.content).trim().slice(0, 100_000),
+          sourceUri,
+          cardId: String(body.cardId || "").trim().slice(0, 160),
+          runId,
+          projectKey: String(body.projectKey || "trello-summaries").trim().slice(0, 120),
+          method: "reviewed-import",
+          providerMode: String(body.providerMode || "local").trim().slice(0, 80),
+          confidence: Math.max(0, Math.min(1, Number(body.confidence || 0))),
+          reviewedAt: nowIso(),
+          haiApprovedAt: null,
+          creditsUsed: 0
+        };
+        if (body.haiApproved === true) markHaiApproval(state, record);
+        state.summaries.unshift(record);
+        state.summaries = state.summaries.slice(0, 1000);
+        return { summary: record, existing: false };
+      });
+      const { summary } = saved;
+      if (saved.existing) {
+        return { status: 200, payload: { success: true, summary: cleanSummaryForUser(summary), existing: true } };
       }
-      const summary = await store.add("summaries", {
-        id: createId("summary"),
-        userId: context.user.id,
-        workspaceId: context.user.workspaceId,
-        title: String(body.title).trim().slice(0, 300),
-        summary: String(body.content).trim().slice(0, 100_000),
-        sourceUri,
-        cardId: String(body.cardId || "").trim().slice(0, 160),
-        runId,
-        projectKey: String(body.projectKey || "trello-summaries").trim().slice(0, 120),
-        method: "reviewed-import",
-        providerMode: String(body.providerMode || "local").trim().slice(0, 80),
-        confidence: Math.max(0, Math.min(1, Number(body.confidence || 0))),
-        reviewedAt: nowIso(),
-        haiApprovedAt: body.haiApproved === true ? nowIso() : null,
-        creditsUsed: 0
-      }, { limit: 1000 });
       await appendEvent(store, "summary.reviewed_saved", {
         userId: context.user.id,
         summaryId: summary.id,
@@ -999,9 +1054,11 @@ async function route(req, res, store, adminPasswordRecord) {
       json(res, 404, { success: false, error: "Summary not found" });
       return;
     }
-    const updated = await store.updateRecord("summaries", summary.id, (record) => {
-      record.haiApprovedAt = body.approved ? nowIso() : null;
-    });
+    const updated = await setSummaryHaiApproval(store, summary.id, context.user.id, body.approved);
+    if (!updated) {
+      json(res, 404, { success: false, error: "Summary not found" });
+      return;
+    }
     await appendEvent(store, body.approved ? "summary.hai_approved" : "summary.hai_revoked", {
       userId: context.user.id,
       summaryId: summary.id
@@ -1034,23 +1091,25 @@ async function route(req, res, store, adminPasswordRecord) {
       return;
     }
     const rawToken = `hai_${crypto.randomBytes(32).toString("base64url")}`;
-    const records = await store.list("haiTokens");
-    records.forEach((item) => {
-      if (item.userId === context.user.id && !item.revokedAt) {
-        item.revokedAt = nowIso();
-        item.updatedAt = item.revokedAt;
-      }
+    await store.transaction((state) => {
+      const records = state.haiTokens;
+      records.forEach((item) => {
+        if (item.userId === context.user.id && !item.revokedAt) {
+          item.revokedAt = nowIso();
+          item.updatedAt = item.revokedAt;
+        }
+      });
+      records.unshift({
+        id: createId("hai-token"),
+        userId: context.user.id,
+        tokenHash: haiTokenHash(rawToken),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        revokedAt: null,
+        lastUsedAt: null
+      });
+      state.haiTokens = records.slice(0, 1000);
     });
-    records.unshift({
-      id: createId("hai-token"),
-      userId: context.user.id,
-      tokenHash: haiTokenHash(rawToken),
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      revokedAt: null,
-      lastUsedAt: null
-    });
-    await store.replace("haiTokens", records.slice(0, 1000));
     await appendEvent(store, "hai.connector_token_rotated", { userId: context.user.id });
     json(res, 201, {
       success: true,
@@ -1064,16 +1123,17 @@ async function route(req, res, store, adminPasswordRecord) {
   if (req.method === "DELETE" && pathname === "/api/integrations/hai/token") {
     const context = await requireSession(store, req, res, "user");
     if (!context) return;
-    const records = await store.list("haiTokens");
-    let revoked = 0;
-    records.forEach((item) => {
-      if (item.userId === context.user.id && !item.revokedAt) {
-        item.revokedAt = nowIso();
-        item.updatedAt = item.revokedAt;
-        revoked += 1;
-      }
+    const revoked = await store.transaction((state) => {
+      let count = 0;
+      state.haiTokens.forEach((item) => {
+        if (item.userId === context.user.id && !item.revokedAt) {
+          item.revokedAt = nowIso();
+          item.updatedAt = item.revokedAt;
+          count += 1;
+        }
+      });
+      return count;
     });
-    await store.replace("haiTokens", records);
     await appendEvent(store, "hai.connector_token_revoked", { userId: context.user.id, revoked });
     json(res, 200, { success: true, revoked });
     return;

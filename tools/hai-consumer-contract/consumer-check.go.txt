@@ -1,0 +1,80 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+func verify() error {
+	for _, name := range []string{"feed.json", "empty-page.json"} {
+		body, err := os.ReadFile("/probe/" + name)
+		if err != nil {
+			return err
+		}
+		parsed, err := ParseGenericFeed(body, 0, 0)
+		if err != nil {
+			return fmt.Errorf("account-feed %s: %w", name, err)
+		}
+		var connected jsonFeedEnvelope
+		if err := json.Unmarshal(body, &connected); err != nil {
+			return fmt.Errorf("Connected Sources %s: %w", name, err)
+		}
+		if parsed.Cursor == "" || parsed.Cursor != connected.NextCursor || len(parsed.Items) != len(connected.Items) {
+			return fmt.Errorf("%s: cursor or record-count disagreement", name)
+		}
+		expectedCount := 1
+		if name == "empty-page.json" {
+			expectedCount = 0
+		}
+		if len(parsed.Items) != expectedCount {
+			return fmt.Errorf("%s: unexpected record count", name)
+		}
+		for index, item := range parsed.Items {
+			other := connected.Items[index]
+			if item.ExternalID != other.ExternalID || item.Content != other.Content || item.Title != other.Title ||
+				item.SourceURI != other.SourceURI || item.ItemType != other.ItemType || item.ProjectKey != other.ProjectKey {
+				return fmt.Errorf("%s: consumers disagree on item %d", name, index)
+			}
+			if item.Provider != "trello" || item.ItemType != "card" || item.ReceivedAt == nil || item.RawJSON == "" {
+				return fmt.Errorf("%s: account-feed normalized contract is incomplete", name)
+			}
+		}
+	}
+	body, err := os.ReadFile("/probe/feed.json")
+	if err != nil {
+		return err
+	}
+	var invalid map[string]interface{}
+	if err := json.Unmarshal(body, &invalid); err != nil {
+		return err
+	}
+	item := invalid["items"].([]interface{})[0].(map[string]interface{})
+	item["provider"] = "unsupported-provider"
+	badProvider, err := json.Marshal(invalid)
+	if err != nil {
+		return err
+	}
+	if _, err := ParseGenericFeed(badProvider, 0, 0); err == nil {
+		return fmt.Errorf("actual parser did not reject an invalid provider")
+	}
+	item["provider"] = "trello"
+	item["metadata"] = map[string]interface{}{"not": "a string"}
+	badMetadata, err := json.Marshal(invalid)
+	if err != nil {
+		return err
+	}
+	var connected jsonFeedEnvelope
+	if err := json.Unmarshal(badMetadata, &connected); err == nil {
+		return fmt.Errorf("Connected Sources did not reject incompatible metadata")
+	}
+	fmt.Println("Actual HAI account-feed parser and Connected Sources JSON schema accepted the synthetic HTTP feed and empty continuation page.")
+	return nil
+}
+
+func main() {
+	if err := verify(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

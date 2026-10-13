@@ -7,6 +7,12 @@ const { createId } = require("./backend-storage");
 const DEFAULT_LEASE_MS = 60_000;
 const DEFAULT_RETRY_BASE_MS = 1_000;
 
+function normalizeWorkerInterval(value) {
+  const interval = Number(value);
+  if (!Number.isFinite(interval) || interval <= 0) return 5_000;
+  return Math.max(1_000, Math.min(2_147_483_647, Math.floor(interval)));
+}
+
 function nowIso(now = Date.now()) {
   return new Date(now).toISOString();
 }
@@ -150,6 +156,7 @@ async function processWorkerCycle(store, options = {}) {
 }
 
 module.exports = {
+  normalizeWorkerInterval,
   processDueReminders,
   processNextBatchJob,
   processWorkerCycle,

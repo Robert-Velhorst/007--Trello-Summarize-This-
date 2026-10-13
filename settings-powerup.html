@@ -1023,7 +1023,7 @@
 
       async function logoutBackendAccount() {
         try {
-          if (String(fields.backendSessionToken.value || "").trim()) {
+          if (String(fields.backendSessionToken.value || await readBackendSessionToken() || "").trim()) {
             await backendRequest("/auth/logout", { method: "POST", body: "{}" }, true);
           }
         } catch (_error) {
