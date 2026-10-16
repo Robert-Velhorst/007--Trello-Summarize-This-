@@ -1,4 +1,4 @@
-FROM node:26-alpine
+FROM node:26.12.0-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5
 
 ENV NODE_ENV=production \
     API_HOST=0.0.0.0 \
