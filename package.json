@@ -41,7 +41,7 @@
     "test:windows-payload": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/windows/build-installer.ps1 -PayloadInspectionPath .tmp/installer-payload",
     "build:windows-installer": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/windows/build-installer.ps1"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "pg": "^8.23.1"
   },
