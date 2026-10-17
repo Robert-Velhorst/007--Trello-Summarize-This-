@@ -362,7 +362,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-The Docker stack is single-instance by design. It uses PostgreSQL 17, loopback binding, a non-root backend container, dropped Linux capabilities, health checks, bounded pooling, and named volumes.
+The Docker stack is single-instance by design. It uses PostgreSQL 18.6 with a new-version data volume, loopback binding, a non-root backend container, dropped Linux capabilities, health checks, bounded pooling, and named volumes. For an existing PostgreSQL 17 volume, follow [the staged PostgreSQL 17 to 18 migration guide](docs/POSTGRES_17_TO_18_MIGRATION.md) before switching containers.
 
 ## AI, Privacy, And Provider Modes
 

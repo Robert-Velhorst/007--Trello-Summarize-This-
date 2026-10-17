@@ -171,7 +171,9 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Compose binds the backend to `127.0.0.1:8787`, runs PostgreSQL 17 without a host port, uses a bounded backend pool, runs as a non-root user with dropped capabilities, stores state in named volumes, and runs the worker inside the backend process. Add owner-controlled TLS ingress before exposing it beyond the local machine.
+Compose binds the backend to `127.0.0.1:8787`, runs PostgreSQL 18.6 without a host port on a version-specific data volume, uses a bounded backend pool, runs as a non-root user with dropped capabilities, stores state in named volumes, and runs the worker inside the backend process. Add owner-controlled TLS ingress before exposing it beyond the local machine.
+
+For an existing PostgreSQL 17 database, complete the staged dump/restore procedure in [POSTGRES_17_TO_18_MIGRATION.md](POSTGRES_17_TO_18_MIGRATION.md) before using the new Compose volume.
 
 ## Security Warnings
 
