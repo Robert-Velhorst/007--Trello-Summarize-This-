@@ -44,10 +44,7 @@ Your Trello Power-Up is configured to use evidence-backed confidence scoring, va
 4. Wait 30 seconds
 5. Copy your URL (e.g., `https://summarize-this-abc123.netlify.app`)
 
-**Option B: Vercel**
-1. Install Vercel CLI: `npm install -g vercel`
 2. Unzip the package
-3. Run: `cd summarize-this-powerup && vercel`
 4. Copy your deployment URL
 
 **Option C: GitHub Pages**

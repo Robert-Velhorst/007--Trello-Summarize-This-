@@ -1759,13 +1759,12 @@ const deploymentPresets = TrelloAdminConfig.createDeploymentPresets({
   githubOwner: "Noodzakelijk-Online",
   githubRepo: "007--Trello-Summarize-This-"
 });
-assert.deepEqual(deploymentPresets.map((preset) => preset.id), ["github-pages", "netlify", "vercel", "custom"]);
+assert.deepEqual(deploymentPresets.map((preset) => preset.id), ["github-pages", "netlify", "custom"]);
 assert.equal(
   deploymentPresets.find((preset) => preset.id === "github-pages").baseUrl,
   "https://noodzakelijk-online.github.io/007--Trello-Summarize-This-"
 );
 assert.ok(deploymentPresets.find((preset) => preset.id === "netlify").baseUrl.includes(".netlify.app"));
-assert.ok(deploymentPresets.find((preset) => preset.id === "vercel").baseUrl.includes(".vercel.app"));
 
 const githubDeploymentGuide = TrelloAdminConfig.createDeploymentGuide(
   "github-pages",

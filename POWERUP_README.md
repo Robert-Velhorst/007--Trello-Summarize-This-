@@ -40,8 +40,6 @@ You need to host these files on an HTTPS server. Choose one of these options:
 3. Drag and drop the `summarize-this-v2` folder
 4. Get your HTTPS URL (e.g., `https://your-site.netlify.app`)
 
-**Option B: Vercel**
-1. Go to [vercel.com](https://vercel.com)
 2. Sign up for free account
 3. Import from GitHub or upload files
 4. Get your HTTPS URL
