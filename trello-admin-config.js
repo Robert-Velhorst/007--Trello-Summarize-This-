@@ -56,14 +56,6 @@
         actionUrl: "https://app.netlify.com/start"
       },
       {
-        id: "vercel",
-        label: "Vercel",
-        baseUrl: "https://" + clean(source.vercelProject || "YOUR-PROJECT") + ".vercel.app",
-        help: "Replace YOUR-PROJECT with the Vercel project name.",
-        actionLabel: "Open Vercel deploy",
-        actionUrl: "https://vercel.com/new"
-      },
-      {
         id: "custom",
         label: "Custom HTTPS",
         baseUrl: "https://your-hosted-site.example",
@@ -124,14 +116,6 @@
         "Use the project root as the publish directory when these static files live at the root.",
         "After Netlify publishes, replace YOUR-SITE with the actual Netlify site name.",
         "Use the public https://*.netlify.app URL here."
-      ];
-    } else if (id === "vercel") {
-      guide.steps = [
-        "Import the GitHub repository into Vercel.",
-        "Use the static project root as the output location.",
-        "Leave framework auto-detection disabled or set the project as static when prompted.",
-        "After Vercel publishes, replace YOUR-PROJECT with the actual Vercel project name.",
-        "Use the public https://*.vercel.app URL here."
       ];
     } else {
       guide.steps = [

@@ -173,7 +173,7 @@ Low. The Power-Up reads card, board, list, and settings data on demand. Badge re
 ## Tradeoffs
 
 - The default prompt and response caps preserve the feature but may omit very old comments or compress very detailed provider output. This is intentional: the latest 12 comments and card description usually carry the strongest context, and the local summary still uses structured metadata. Users can raise the caps for unusually large cards.
-- The Windows `.exe` installer runs the standalone/local version. Trello Power-Up usage still requires hosting the static files on HTTPS, because Trello cannot load a private local Windows installer path inside Trello. The installed setup assistant now provides GitHub Pages, Netlify, Vercel, and custom HTTPS presets so the correct public connector URL can be prepared with less manual work.
+- The Windows `.exe` installer runs the standalone/local version. Trello Power-Up usage still requires hosting the static files on HTTPS, because Trello cannot load a private local Windows installer path inside Trello. The installed setup assistant provides GitHub Pages, Netlify, and custom HTTPS presets so the correct public connector URL can be prepared with less manual work.
 
 ## Remaining Opportunities
 

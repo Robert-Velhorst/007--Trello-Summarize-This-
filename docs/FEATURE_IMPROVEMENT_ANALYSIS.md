@@ -37,12 +37,12 @@ Status: Improved in `trello-setup.html` and `trello-admin-config.js`.
 Implemented:
 
 - The setup assistant explains that local Windows mode and Trello Power-Up mode are separate.
-- It provides deployment presets for GitHub Pages, Netlify, Vercel, and custom HTTPS hosting.
+- It provides deployment presets for GitHub Pages, Netlify, and custom HTTPS hosting.
 - It validates setup readiness so placeholder, local, file, and non-HTTPS URLs are not shown as Trello-ready.
 - It generates the hosted HTTPS iframe Connector URL, icon URL, manifest values, and capability list.
 - It includes hosted privacy and terms policy URLs so common Trello admin policy fields can be filled from the same setup package.
 - It provides a copy-all setup block for manual Trello Power-Up admin entry.
-- It shows host-specific deployment steps and verification checks for GitHub Pages, Netlify, Vercel, or custom HTTPS hosting.
+- It shows host-specific deployment steps and verification checks for GitHub Pages, Netlify, or custom HTTPS hosting.
 - It provides a safe admin autofill bookmarklet that runs only on Trello's Power-Up admin page. It matches the current two-stage workflow: the New App form has a manually selected Workspace plus fillable App name, Email, Support contact, Author, and iframe Connector URL; the app edit page can then receive matching metadata, policy URLs, and capability checkboxes.
 - It now renders a readiness checklist for HTTPS hosting, connector/manifest/icon URLs, monitored developer and support contacts, required capabilities, manual Workspace selection, and manual-save safety.
 - It now renders and exports an explicit Trello admin field map that lists each value, stage, matched admin labels, manual steps, and capability checkbox target used by the autofill helper.

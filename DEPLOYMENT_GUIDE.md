@@ -20,7 +20,6 @@ Complete guide for deploying the Summarize This Trello Power-Up to production.
 
 ### Option 1: Static Hosting (Recommended for MVP)
 
-**Suitable for:** Netlify, Vercel, GitHub Pages, AWS S3 + CloudFront
 
 **Advantages:**
 - Simple deployment
@@ -33,7 +32,6 @@ Complete guide for deploying the Summarize This Trello Power-Up to production.
 
 1. **Choose hosting provider**
    - Netlify (recommended for beginners)
-   - Vercel (recommended for developers)
    - GitHub Pages (free, but limited)
    - AWS S3 + CloudFront (enterprise-grade)
 
@@ -79,14 +77,10 @@ Complete guide for deploying the Summarize This Trello Power-Up to production.
    netlify deploy --prod
    ```
 
-   **Vercel:**
    ```bash
-   # Install Vercel CLI
-   npm install -g vercel
    
    # Deploy
    cd summarize-this-v2
-   vercel --prod
    ```
 
    **GitHub Pages:**
@@ -383,12 +377,10 @@ Monitor:
 
 **Free Tier Options:**
 - Netlify: 100GB bandwidth/month
-- Vercel: 100GB bandwidth/month
 - GitHub Pages: 100GB bandwidth/month
 
 **Paid Options:**
 - Netlify Pro: $19/month
-- Vercel Pro: $20/month
 - AWS S3 + CloudFront: ~$5-50/month (usage-based)
 
 ### AI API Costs
@@ -463,7 +455,6 @@ Ensure:
 
 - [Trello Power-Up Documentation](https://developer.atlassian.com/cloud/trello/power-ups/)
 - [Netlify Documentation](https://docs.netlify.com/)
-- [Vercel Documentation](https://vercel.com/docs)
 - [Let's Encrypt](https://letsencrypt.org/)
 - [MDN Web Docs](https://developer.mozilla.org/)
 
