@@ -18,7 +18,7 @@ The installed backend prefers `http://127.0.0.1:18787/api` and automatically sel
 
 ### Prerequisites
 
-- Node.js 20 or 22 for repository development and CI
+- Node.js 24.22.0 or 26.12.0 for repository development and CI
 - No other dependencies required for the static Power-Up
 
 ### Start the Static Power-Up Server
