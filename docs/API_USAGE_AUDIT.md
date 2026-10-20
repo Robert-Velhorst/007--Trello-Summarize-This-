@@ -130,4 +130,4 @@ All API responses now include:
 
 ## Removed Legacy Admin Client
 
-The unused root-level dminApi.js client has been removed. It required undeclared browser dependencies, called endpoints not exposed by ackend-app.js, and was not loaded by the shipped Power-Up. The separate pi/adminApi.js module remains part of the application.
+The unused root-level `adminApi.js` client has been removed. It required undeclared browser dependencies, called endpoints not exposed by `backend-app.js`, and was not loaded by the shipped Power-Up.
