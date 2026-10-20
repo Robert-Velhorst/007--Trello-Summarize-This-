@@ -970,7 +970,7 @@
       async function backendRequest(path, options, requireToken) {
         var backend = configuredBackend();
         if (!backend.valid) throw new Error(backend.error || "Add a valid backend API base first.");
-        var headers = Object.assign({ "Content-Type": "application/json" }, SummarizeThis.backendTransportHeaders(backend.apiBase));
+        var headers = { "Content-Type": "application/json" };
         if (requireToken) {
           var token = String(fields.backendSessionToken.value || await readBackendSessionToken() || "").trim();
           if (!token) throw new Error("Sign in to the backend first.");

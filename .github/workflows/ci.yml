@@ -190,7 +190,7 @@ jobs:
         shell: powershell
         run: |
           $runtimeFiles = Get-Content runtime-files.json -Raw | ConvertFrom-Json
-          foreach ($file in @($runtimeFiles) + @("Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "install.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")) {
+          foreach ($file in @($runtimeFiles) + @("Start-SummarizeThis.ps1", "install.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")) {
             if (-not (Test-Path -LiteralPath (Join-Path ".tmp\installer-payload" $file) -PathType Leaf)) {
               throw "Installer payload is missing $file"
             }

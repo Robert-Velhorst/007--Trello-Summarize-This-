@@ -603,7 +603,7 @@ async function route(req, res, store, adminPasswordRecord) {
     }
     if (config.REGISTRATION_MODE === "single-user") {
       if (hasForwardingHeaders(req)) {
-        json(res, 403, { success: false, error: "Create the owner account from the installed app on the host computer before opening a public tunnel" });
+        json(res, 403, { success: false, error: "Create the owner account from the installed app before connecting remote clients" });
         return;
       }
       if ((await store.listUsers()).length > 0) {
@@ -2091,7 +2091,7 @@ async function createBackendApp(options = {}) {
       if (origin) {
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, ngrok-skip-browser-warning");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
         res.setHeader("Access-Control-Max-Age", "86400");
         res.setHeader("Vary", "Origin");
       }

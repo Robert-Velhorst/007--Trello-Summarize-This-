@@ -4930,17 +4930,12 @@
           throw new Error("Backend batch persistence requires a saved backend session token.");
         }
 
-        var response = await fetch(backend.apiBase + path, Object.assign({
-          headers: Object.assign({
+        var requestOptions = Object.assign({}, options || {});
+        requestOptions.headers = Object.assign({
             "Content-Type": "application/json",
             "Authorization": "Bearer " + token
-          }, SummarizeThis.backendTransportHeaders(backend.apiBase))
-        }, options || {}, {
-          headers: Object.assign({
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          }, SummarizeThis.backendTransportHeaders(backend.apiBase), options && options.headers ? options.headers : {})
-        }));
+          }, options && options.headers ? options.headers : {});
+        var response = await fetch(backend.apiBase + path, requestOptions);
 
         var data = await response.json().catch(function () { return {}; });
         if (!response.ok) {

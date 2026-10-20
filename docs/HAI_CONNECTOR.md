@@ -34,17 +34,11 @@ For Robert's Hetzner-hosted backend (the current hosting target):
 2. Use `https://<APP_DOMAIN>/api` as the Power-Up backend API base and sign in to that backend.
 3. Generate the capability URL there so it uses the public HTTPS hostname, not a Windows loopback URL.
 4. Add only that API hostname, without a scheme or path, to HAI's `CONNECTED_SOURCE_HTTP_ALLOWED_HOSTS`. Preserve existing allowed hosts for unrelated connected sources; do not use a wildcard or relax private-address checks.
-5. Under the HAI owner's authenticated session, create the `json-feed` source and run its normal reviewed sync. Verify record counts, exact reviewed text, project assignment and cursor behavior before retiring the old tunnel.
+5. Under the HAI owner's authenticated session, create the `json-feed` source and run its normal reviewed sync. Verify record counts, exact reviewed text, project assignment and cursor behavior before switching the source to the Hetzner API.
 
 A hosted HAI instance cannot reach a backend at `127.0.0.1` on Robert's PC: loopback refers to the HAI host itself. Use the public Hetzner hostname for this cross-host integration. The Trello connector iframe remains on its existing static host.
 
-For an optional legacy Windows host reached through ngrok (not required for Hetzner):
-
-1. Open **Configure ngrok domain** once and save the reserved HTTPS domain, then start **Share Backend with ngrok** from the Summarize This Start menu folder.
-2. Use the ngrok HTTPS hostname in the Power-Up backend API base, followed by `/api`.
-3. Generate a new HAI connector URL so it uses that HTTPS hostname.
-4. Add only the ngrok hostname to HAI's `CONNECTED_SOURCE_HTTP_ALLOWED_HOSTS` setting.
-5. Create the `json-feed` source in HAI and run its normal reviewed sync.
+The Windows installer now provides local-only access. For remote Trello or HAI use, deploy the backend to Hetzner, configure the public HTTPS API hostname in Trello, and allowlist that hostname in HAI's `CONNECTED_SOURCE_HTTP_ALLOWED_HOSTS` setting.
 
 HAI app authorization remains authoritative. Summarize This deliberately does not reuse, request, or store an HAI login token to create the source silently.
 

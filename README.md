@@ -23,7 +23,7 @@ Previous repository URL, currently redirected by GitHub: <https://github.com/Noo
 
 Use this tool when Trello cards contain too much scattered information and you want a clearer status update. It can read the visible card context, produce a structured summary, and help you decide what needs action.
 
-You do not need to understand the code to use the Windows installer or the Trello Power-Up setup assistant. The installer adds Start menu shortcuts for opening the local app, configuring Trello, starting an explicit ngrok tunnel, and uninstalling the app.
+You do not need to understand the code to use the Windows installer or the Trello Power-Up setup assistant. The installer adds Start menu shortcuts for opening the local app, configuring Trello, and uninstalling the app.
 
 ### Software developers and operators
 
@@ -140,7 +140,7 @@ The backend is single-writer by design. It is suitable for local/single-instance
 
 ### Windows 11 app
 
-The repository includes a Windows installer path. The installer is intended for easy local use and for starting a local backend/UI without requiring the end user to install Node.js or Docker. For a persistent remote backend, deploy the backend to Hetzner instead of keeping a tunnel open from this PC.
+The repository includes a Windows installer path. The installer is intended for easy local use and for starting a local backend/UI without requiring the end user to install Node.js or Docker. For a persistent remote backend, deploy the backend to Hetzner; the Windows installer stays local-only.
 
 Installed behavior:
 
@@ -151,10 +151,7 @@ Installed behavior:
 - Selects a safe fallback port if the preferred backend port is occupied.
 - Stores generated secrets and runtime data with current-user-only permissions.
 - Preserves data during upgrades.
-- Retains an optional ngrok launcher for legacy local sharing; it is not required when using the Hetzner-hosted backend.
-- Does not start any tunnel automatically.
 - Does not create a predictable default account.
-- Refuses public tunnel exposure before a local owner account exists.
 
 The installed app and Trello Power-Up are related but separate:
 
@@ -201,7 +198,7 @@ Legacy popup filenames such as `popup-999-accuracy.html`, `popup-enhanced.html`,
 3. Open **Summarize This** from the Start menu.
 4. Create the local owner account when prompted.
 5. Use **Configure Trello Power-Up** if you want to connect Trello.
-6. For a backend that remains available when your PC is off, follow [the Hetzner deployment guide](docs/HETZNER_DEPLOYMENT.md) and set the backend API URL in Power-Up settings. The legacy ngrok shortcut is not needed for that setup.
+6. For a backend that remains available when your PC is off, follow [the Hetzner deployment guide](docs/HETZNER_DEPLOYMENT.md) and set the backend API URL in Power-Up settings.
 
 The Windows app does not require administrator rights, Node.js, Docker, or a background service.
 
@@ -249,7 +246,7 @@ Local connector preview:
 http://127.0.0.1:17117/connector.html
 ```
 
-Trello cannot use a private `127.0.0.1` connector URL from its hosted website. For real Trello use, deploy the static runtime to a public HTTPS origin or expose it deliberately through an approved tunnel.
+Trello cannot use a private `127.0.0.1` connector URL from its hosted website. Keep the static connector on its GitHub Pages origin and use the Hetzner HTTPS API for the backend.
 
 ## Developer Setup
 
@@ -432,7 +429,6 @@ Important boundaries:
 - `.env`, runtime data, installer staging, npm cache, and proxy `.dev.vars` are ignored.
 - Backend registration defaults to `closed`.
 - Windows registration uses `single-user` and accepts the first owner only from the local host.
-- Windows refuses public tunnel exposure before an owner exists.
 - Passwords are hashed with asynchronous scrypt.
 - Unknown-user login performs equivalent password work to reduce timing-based identity discovery.
 - User exports exclude password hashes, salts, and sessions.
@@ -530,7 +526,7 @@ Acceptance evidence and open manual steps are tracked in `docs/ACCEPTANCE_TESTS.
 |-- database/                   PostgreSQL connection helpers
 |-- docs/                       Architecture, safety, verification, runbooks, audits
 |-- fixtures/                   Synthetic labeled evaluation fixture
-|-- installer/windows/          Windows install, uninstall, launcher, ngrok scripts
+|-- installer/windows/          Windows install, uninstall, and local launcher
 |-- middleware/                 Shared backend middleware helpers
 |-- proxy/                      Optional Cloudflare Worker AI proxy
 |-- tools/                      Static build, resource analysis, evaluation, Windows checks
@@ -606,7 +602,7 @@ No. The tool provides evidence-aware summaries and confidence/review signals. It
 
 ### "Can Trello use the Windows app directly?"
 
-No. Trello must load a Power-Up from a public HTTPS URL. The static connector remains hosted separately on GitHub Pages. With the backend deployed to Hetzner, the Power-Up can call its HTTPS API directly and does not need an ngrok tunnel.
+No. Trello must load a Power-Up from a public HTTPS URL. The static connector remains hosted separately on GitHub Pages. With the backend deployed to Hetzner, the Power-Up calls its HTTPS API directly.
 
 ### "Are AI keys required?"
 
@@ -628,7 +624,7 @@ No. It is a local/single-instance product with Docker and PostgreSQL support. Mu
 
 1. Create a branch from the current `main`.
 2. Keep changes scoped.
-3. Do not commit secrets, generated runtime stores, or local tunnel data.
+3. Do not commit secrets or generated runtime stores.
 4. Run the relevant tests before opening a pull request.
 5. Update documentation when behavior changes.
 6. Keep confidence, AI, provider, and live-integration claims evidence-based.
