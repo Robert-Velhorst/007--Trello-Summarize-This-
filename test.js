@@ -81,19 +81,16 @@ const installerBuildText = fs.readFileSync(path.join(__dirname, "installer/windo
 const installerInstallText = fs.readFileSync(path.join(__dirname, "installer/windows/install.ps1"), "utf8");
 assert.match(installerBuildText, /runtime-files\.json/);
 assert.match(installerInstallText, /runtime-files\.json/);
-["Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "uninstall.ps1"].forEach((fileName) => {
+["Start-SummarizeThis.ps1", "uninstall.ps1"].forEach((fileName) => {
   assert.match(installerInstallText, new RegExp(fileName.replace(".", "\\.")), `Windows installer copies helper script ${fileName}`);
 });
+assert.match(installerInstallText, /\$HelperFiles = @\("Start-SummarizeThis\.ps1", "uninstall\.ps1"/);
+assert.doesNotMatch(installerBuildText, /Start-SummarizeThisCloud\.ps1/, "Windows installer package excludes public tunnel support");
 const launcherScriptText = fs.readFileSync(path.join(__dirname, "installer/windows/Start-SummarizeThis.ps1"), "utf8");
 assert.match(launcherScriptText, /\[int\]\$Port\s*=\s*17117/, "Windows launcher supports an explicit QA port while preserving the installed default");
 assert.match(launcherScriptText, /RepoRootCandidate/, "Windows launcher can resolve the repository root when run from installer/windows");
 assert.match(launcherScriptText, /Join-Path \$RepoRootCandidate "popup\.html"/, "Windows launcher serves repo static files during local development");
-const cloudLauncherScriptText = fs.readFileSync(path.join(__dirname, "installer/windows/Start-SummarizeThisCloud.ps1"), "utf8");
-assert.match(cloudLauncherScriptText, /ngrok-settings\.psd1/);
-assert.match(cloudLauncherScriptText, /Resolve-NgrokPublicUrl/);
-assert.match(cloudLauncherScriptText, /--url=\$ConfiguredPublicUrl/);
-assert.match(cloudLauncherScriptText, /storage\.users/);
-assert.match(installerInstallText, /Configure ngrok domain\.lnk/);
+assert.equal(fs.existsSync(path.join(__dirname, "installer/windows/Start-SummarizeThisCloud.ps1")), false);
 assert.match(installerInstallText, /REGISTRATION_MODE\s*=\s*"single-user"/);
 const updateManifest = JSON.parse(fs.readFileSync(path.join(__dirname, "update.json"), "utf8"));
 assert.equal(updateManifest.schemaVersion, "summarize-this-update-manifest-v1");
@@ -504,10 +501,6 @@ assert.equal(localBackendSettings.apiBase, "http://127.0.0.1:18787/api");
 assert.equal(localBackendSettings.valid, true);
 assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://localhost:18787/api" }).valid, true);
 assert.equal(SummarizeThis.normalizeBackendSettings({ apiBase: "http://192.168.1.8:18787/api" }).valid, false);
-assert.deepEqual(SummarizeThis.backendTransportHeaders("https://sample.ngrok-free.app/api"), { "ngrok-skip-browser-warning": "1" });
-assert.deepEqual(SummarizeThis.backendTransportHeaders("https://sample.ngrok-free.dev/api"), { "ngrok-skip-browser-warning": "1" });
-assert.deepEqual(SummarizeThis.backendTransportHeaders("https://powerup.example.com/api"), {});
-assert.deepEqual(SummarizeThis.backendTransportHeaders("not-a-url"), {});
 
 const derivedBackendSettings = SummarizeThis.normalizeBackendSettings({}, {
   enabled: true,

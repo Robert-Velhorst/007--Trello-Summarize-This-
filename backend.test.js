@@ -189,7 +189,7 @@ async function main() {
   });
   assert.equal(allowedPreflight.status, 204);
   assert.equal(allowedPreflight.headers["access-control-allow-origin"], "http://127.0.0.1:17117");
-  assert.match(allowedPreflight.headers["access-control-allow-headers"], /ngrok-skip-browser-warning/i);
+  assert.equal(allowedPreflight.headers["access-control-allow-headers"], "Content-Type, Authorization, Idempotency-Key");
   assert.equal(allowedPreflight.headers.vary, "Origin");
 
   const rejectedOrigin = await requestJson(app, "GET", "/api/health", undefined, {

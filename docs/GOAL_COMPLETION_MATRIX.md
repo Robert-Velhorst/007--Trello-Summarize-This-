@@ -41,6 +41,6 @@ Previous: 2026-07-12
 | Doctor self-diagnostics | Implemented | `node doctor.js` (39 checks) and `node backend-doctor.js` |
 | Custom prompt templates | Implemented | Template CRUD, selection, and per-template instructions |
 | Dark mode support | Implemented | System dark mode via prefers-color-scheme in popup and settings |
-| Windows installer | Implemented and acceptance-tested | Single `.exe`, bundled Node 22 backend, exact current-user-only settings/data ACLs, loopback local database, private-file static allowlist, safe in-place upgrade with data preservation, Start menu launchers, ngrok launcher, and verified uninstall. No Node, Docker, or admin rights required. |
+| Windows installer | Implemented and acceptance-tested | Single `.exe`, bundled Node 22 backend, exact current-user-only settings/data ACLs, loopback local database, private-file static allowlist, safe in-place upgrade with data preservation, local Start menu launchers, and verified uninstall. No Node, Docker, or admin rights required. |
 | Docker deployment artifacts | Implemented (single-instance production scope) | Non-root image, PostgreSQL 17, health checks, loopback binding, dropped capabilities, named volumes, bounded pool, and integrated worker. |
 | GitHub Pages deployment | Implemented and live | Allowlisted 24-file static build, Pages workflow, and owner URL were verified on 2026-08-09. |

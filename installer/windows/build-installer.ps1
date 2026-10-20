@@ -26,7 +26,6 @@ if ($RuntimeFiles.Count -eq 0 -or $RuntimeFiles.Count -ne (@($RuntimeFiles | Sel
 $InstallerFiles = @(
   "install.ps1",
   "Start-SummarizeThis.ps1",
-  "Start-SummarizeThisCloud.ps1",
   "uninstall.ps1"
 )
 $BackendExecutable = Join-Path $RepoRoot "dist\windows-backend\SummarizeThisBackend.exe"

@@ -43,7 +43,7 @@ if (-not (Test-Path -LiteralPath $RuntimeManifestPath -PathType Leaf)) {
   throw "Installer package is missing runtime-files.json"
 }
 $RuntimeFiles = Get-Content -LiteralPath $RuntimeManifestPath -Raw | ConvertFrom-Json
-$HelperFiles = @("Start-SummarizeThis.ps1", "Start-SummarizeThisCloud.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")
+$HelperFiles = @("Start-SummarizeThis.ps1", "uninstall.ps1", "SummarizeThisBackend.exe")
 
 if ($RuntimeFiles.Count -eq 0 -or $RuntimeFiles.Count -ne (@($RuntimeFiles | Select-Object -Unique)).Count) {
   throw "runtime-files.json must contain a non-empty unique file list."
@@ -52,6 +52,17 @@ if ($RuntimeFiles.Count -eq 0 -or $RuntimeFiles.Count -ne (@($RuntimeFiles | Sel
 Stop-InstalledBackend
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $StartMenuDir | Out-Null
+
+$retiredCloudLauncher = Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1"
+if (Test-Path -LiteralPath $retiredCloudLauncher -PathType Leaf) {
+  Remove-Item -LiteralPath $retiredCloudLauncher -Force
+}
+foreach ($retiredShortcut in @("Configure ngrok domain.lnk", "Share Backend with ngrok.lnk")) {
+  $retiredShortcutPath = Join-Path $StartMenuDir $retiredShortcut
+  if (Test-Path -LiteralPath $retiredShortcutPath -PathType Leaf) {
+    Remove-Item -LiteralPath $retiredShortcutPath -Force
+  }
+}
 
 foreach ($file in @($RuntimeFiles) + $HelperFiles) {
   $source = Join-Path $PSScriptRoot $file
@@ -192,16 +203,11 @@ function New-AppShortcut {
 $launchScript = Join-Path $InstallRoot "Start-SummarizeThis.ps1"
 $launchArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$launchScript`""
 $setupArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$launchScript`" -Setup"
-$cloudScript = Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1"
-$cloudArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$cloudScript`""
-$cloudConfigArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$cloudScript`" -Configure"
 $uninstallScript = Join-Path $InstallRoot "uninstall.ps1"
 $uninstallArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$uninstallScript`""
 
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Summarize This.lnk") -Target $PowerShellPath -Arguments $launchArgs -WorkingDirectory $InstallRoot
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Configure Trello Power-Up.lnk") -Target $PowerShellPath -Arguments $setupArgs -WorkingDirectory $InstallRoot
-New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Configure ngrok domain.lnk") -Target $PowerShellPath -Arguments $cloudConfigArgs -WorkingDirectory $InstallRoot
-New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Share Backend with ngrok.lnk") -Target $PowerShellPath -Arguments $cloudArgs -WorkingDirectory $InstallRoot
 New-AppShortcut -ShortcutPath (Join-Path $StartMenuDir "Uninstall Summarize This.lnk") -Target $PowerShellPath -Arguments $uninstallArgs -WorkingDirectory $InstallRoot
 
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SummarizeThis"

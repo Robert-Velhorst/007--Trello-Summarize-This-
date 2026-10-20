@@ -46,27 +46,21 @@ try {
     "settings-powerup.html",
     "trello-config.js",
     "authorize.html",
-    "Start-SummarizeThis.ps1",
-    "Start-SummarizeThisCloud.ps1"
+    "Start-SummarizeThis.ps1"
   )) {
     if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $required) -PathType Leaf)) {
       throw "Installed application is missing $required."
     }
   }
 
+  if (Test-Path -LiteralPath (Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1")) {
+    throw "Installed application still contains the retired public tunnel launcher."
+  }
+
   $settingsAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "backend-settings.psd1")
   Assert-CurrentUserOnlyAcl -Acl $settingsAcl -Label "The installed private backend settings file"
   $dataAcl = Get-Acl -LiteralPath (Join-Path $InstallRoot "data")
   Assert-CurrentUserOnlyAcl -Acl $dataAcl -Label "The installed private data directory"
-
-  $testNgrokUrl = "https://summarize-this-test.ngrok.app"
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1") -ConfigureUrl $testNgrokUrl
-  if ($LASTEXITCODE -ne 0) { throw "The ngrok domain configuration helper returned exit code $LASTEXITCODE." }
-  $configuredNgrokUrl = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1") -PrintConfiguredUrl
-  if (([string]$configuredNgrokUrl).Trim() -ne $testNgrokUrl) { throw "The ngrok domain configuration was not resolved exactly." }
-  $ngrokSettingsBeforeUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "ngrok-settings.psd1") -Raw
-  $cloudShortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Summarize This\Configure ngrok domain.lnk"
-  if (-not (Test-Path -LiteralPath $cloudShortcut -PathType Leaf)) { throw "The ngrok domain configuration shortcut is missing." }
 
   try {
     $CollisionListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 18787)
@@ -133,9 +127,22 @@ try {
       throw "Upgrade installer changed the existing backend setting $($entry.Key)."
     }
   }
-  $ngrokSettingsAfterUpgrade = Get-Content -LiteralPath (Join-Path $InstallRoot "ngrok-settings.psd1") -Raw
-  if ($ngrokSettingsAfterUpgrade -ne $ngrokSettingsBeforeUpgrade) {
-    throw "Upgrade installer replaced the configured ngrok domain."
+  $retiredCloudLauncher = Join-Path $InstallRoot "Start-SummarizeThisCloud.ps1"
+  Set-Content -LiteralPath $retiredCloudLauncher -Value "retired launcher" -Encoding UTF8
+  $startMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Summarize This"
+  $retiredShortcuts = @("Configure ngrok domain.lnk", "Share Backend with ngrok.lnk")
+  foreach ($retiredShortcut in $retiredShortcuts) {
+    Set-Content -LiteralPath (Join-Path $startMenuDir $retiredShortcut) -Value "retired shortcut" -Encoding UTF8
+  }
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Payload "install.ps1") -NoLaunch
+  if ($LASTEXITCODE -ne 0) { throw "Legacy installer migration returned exit code $LASTEXITCODE." }
+  if (Test-Path -LiteralPath $retiredCloudLauncher) {
+    throw "Upgrade installer did not remove the retired public tunnel launcher."
+  }
+  foreach ($retiredShortcut in $retiredShortcuts) {
+    if (Test-Path -LiteralPath (Join-Path $startMenuDir $retiredShortcut)) {
+      throw "Upgrade installer did not remove the retired public tunnel shortcut $retiredShortcut."
+    }
   }
 
   $backendPortOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallRoot "Start-SummarizeThis.ps1") -BackendOnly -NoLaunch -PrintBackendPort
@@ -197,7 +204,7 @@ try {
     InstalledBackend = $health.status
     SelectedBackendPort = $BackendPort
     DefaultPortCollisionHandled = ($BackendPort -ne 18787)
-    CloudDomainPreserved = ($ngrokSettingsAfterUpgrade -eq $ngrokSettingsBeforeUpgrade)
+    RetiredTunnelSupportRemoved = (-not (Test-Path -LiteralPath $retiredCloudLauncher))
     Storage = $health.storage.kind
     PrivateSettingsAcl = $settingsAcl.AreAccessRulesProtected
     PrivateDataAcl = $dataAcl.AreAccessRulesProtected

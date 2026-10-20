@@ -10,11 +10,9 @@ Run `SummarizeThisSetup.exe`, then use the Start menu shortcuts:
 
 - **Summarize This** starts the bundled backend and local UI.
 - **Configure Trello Power-Up** opens the setup assistant.
-- **Configure ngrok domain** validates and saves a reserved HTTPS domain for future tunnels.
-- **Share Backend with ngrok** starts an explicit HTTPS tunnel after checking the backend. ngrok must already be installed and authorized.
 - **Uninstall Summarize This** stops the exact installed backend process and removes the per-user installation.
 
-The installed backend prefers `http://127.0.0.1:18787/api` and automatically selects a safe loopback fallback if another application owns that port. The launcher passes the selected port to the UI and ngrok. Generated secrets and the local store stay under the current user's LocalAppData installation folder.
+The installed backend prefers `http://127.0.0.1:18787/api` and automatically selects a safe loopback fallback if another application owns that port. Generated secrets and the local store stay under the current user's LocalAppData installation folder. Remote Trello and HAI access uses the Hetzner API deployment.
 
 ### Prerequisites
 
@@ -132,7 +130,7 @@ node test.js
 
 ### Manual (requires live Trello board)
 
-1. Install the Power-Up by hosting connector.html at a public HTTPS URL (or use ngrok for local testing)
+1. Install the Power-Up by hosting connector.html at its GitHub Pages HTTPS URL.
 2. Add the Power-Up to a Trello board using `manifest.json`
 3. Open a Trello card with description, labels, comments, and attachments
 4. Click "Summarize This" → verify popup opens and card context loads
