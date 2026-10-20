@@ -12,7 +12,7 @@ The installer is written to:
 dist\windows-installer\SummarizeThisSetup.exe
 ```
 
-The installer is a self-extracting .NET Framework executable. It bundles a Node 22 backend executable, so the installed app does not require Electron, Node.js, Docker, NSIS, administrator rights, or a network download. It installs into the current user's LocalAppData folder, generates backend secrets in an ACL-protected file, creates Start Menu shortcuts, registers an uninstall entry, and starts the static UI plus backend on loopback only.
+The installer is a self-extracting .NET Framework executable. It bundles a Node 26 backend executable, so the installed app does not require Electron, Node.js, Docker, NSIS, administrator rights, or a network download. It installs into the current user's LocalAppData folder, generates backend secrets in an ACL-protected file, creates Start Menu shortcuts, registers an uninstall entry, and starts the static UI plus backend on loopback only.
 
 The installed payload includes the 24 allowlisted static runtime files, standalone backend, local `update.json`, Trello setup assistant, cloud launcher, and uninstall helper. The backend prefers `127.0.0.1:18787`, selects a safe loopback fallback when that port is occupied, uses a private local JSON store by default, and starts only one process.
 

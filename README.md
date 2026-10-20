@@ -255,7 +255,7 @@ Trello cannot use a private `127.0.0.1` connector URL from its hosted website. F
 
 ### Requirements
 
-- Node.js 20 or 22.
+- Node.js 24.22.0 or 26.12.0 (the current CI targets).
 - npm.
 - PowerShell on Windows for installer scripts.
 - Docker only if running the Docker backend stack.
@@ -322,7 +322,7 @@ This copies only the allowlisted runtime files from `runtime-files.json` into `d
 `.github/workflows/deploy-pages.yml` runs on `main` and:
 
 1. Checks out the repository.
-2. Uses Node.js 22.
+2. Uses Node.js 26.
 3. Runs `node static-site.test.js`.
 4. Runs `node tools/build-static-site.js`.
 5. Deploys `dist/static-site` to GitHub Pages.

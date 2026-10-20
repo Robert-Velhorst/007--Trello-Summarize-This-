@@ -4,7 +4,7 @@ Date: 2026-07-23 (Phase 031)
 
 ## Prerequisites
 
-- Node.js >= 18 (verified with v20.20.2)
+- Node.js 24.22.0 or 26.12.0 (both are current CI targets)
 - No other dependencies required for the static Power-Up
 - Optional: Cloudflare Wrangler for proxy development
 

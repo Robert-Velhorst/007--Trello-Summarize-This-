@@ -12,7 +12,7 @@ File: `.github/workflows/ci.yml`
 
 ### Jobs
 
-**Job 1: test** (Node 20.x and 22.x matrix)
+**Job 1: test** (Node 24.22.0 and 26.12.0 matrix)
 1. `npm ci --prefer-offline` — install dependencies
 2. `node test.js` — core logic and popup contract tests
 3. `node backend.test.js` — backend API contract tests
