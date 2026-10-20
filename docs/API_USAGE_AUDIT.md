@@ -128,6 +128,6 @@ All API responses now include:
 - `Referrer-Policy: no-referrer`
 - CORS preflight handling (OPTIONS → 204) only for origins in `BACKEND_ALLOWED_ORIGINS`
 
-## Legacy Admin Client
+## Removed Legacy Admin Client
 
-`adminApi.js` is an inactive legacy client that requires undeclared browser dependencies and contains calls to endpoints not exposed by `backend-app.js`. It is not loaded by the shipped Power-Up and must not be treated as a backend API contract.
+The unused root-level `adminApi.js` client has been removed. It required undeclared browser dependencies, called endpoints not exposed by `backend-app.js`, and was not loaded by the shipped Power-Up.
