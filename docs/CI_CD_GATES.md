@@ -25,7 +25,7 @@ The job also runs static packaging, local-server boundaries, frontend session re
 1. Verify all 17 required documentation files exist
 2. Verify no overclaiming patterns in key documents (no "99.9% accuracy" etc.)
 
-**Job 3: container** builds the production backend image, including stable Alpine package updates.
+**Job 3: container** builds the production backend image, including stable Alpine package updates. Pinned Trivy 0.76.1 scans OS and installed language packages, rejects all reported severities (including unknown/unfixed), and retains the JSON report. A separate verifier requires complete OS and direct runtime dependency inventories and rejects suppressed findings. Runtime package managers are removed after installation. Scanner/database/report failures block this job.
 
 **Job 4: windows-installer** builds the packaged backend and installer, verifies embedded Node 26.12.1+, startup/resource probes and the payload, and exercises install/uninstall in the hosted runner. Local compilation is not proof of hosted install/uninstall or operator acceptance.
 

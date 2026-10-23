@@ -58,6 +58,9 @@ jobs:
       - name: Verify patched runtime policy
         run: node tools/node-runtime-policy.test.js
 
+      - name: Verify image report policy
+        run: node tools/verify-image-security.test.js
+
       - name: Verify production static package
         run: node static-site.test.js
 
@@ -165,8 +168,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up policy verifier runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+
       - name: Build production image
         run: docker build --tag summarize-this:test .
+
+      - name: Scan installed runtime and OS packages
+        run: |
+          mkdir -p artifacts
+          docker image save summarize-this:test --output artifacts/runtime-image.tar
+          docker run --rm --read-only --tmpfs /tmp:rw,size=2048m --cap-drop ALL \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/artifacts/runtime-image.tar,target=/scan/image.tar,readonly" \
+            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --cache-dir /tmp/trivy-cache --scanners vuln --skip-java-db-update --quiet \
+            --list-all-pkgs --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --format json --input /scan/image.tar > artifacts/image-security.json
+
+      - name: Verify complete image inventory
+        run: node tools/verify-image-security.js artifacts/image-security.json
+
+      - name: Retain image scan evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/image-security.json
+          if-no-files-found: warn
+          retention-days: 7
 
   windows-installer:
     name: Windows 11 installer

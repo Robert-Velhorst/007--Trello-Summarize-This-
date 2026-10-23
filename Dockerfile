@@ -14,6 +14,8 @@ RUN apk upgrade --no-cache \
     && npm install --global npm@12.2.1 \
     && npm ci --omit=dev --prefer-offline \
     && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
     && mkdir -p /app/database/runtime \
     && chown -R node:node /app/database
 
