@@ -180,6 +180,7 @@ jobs:
         run: |
           mkdir -p artifacts
           docker image save summarize-this:test --output artifacts/runtime-image.tar
+          chmod 0444 artifacts/runtime-image.tar
           docker run --rm --read-only --tmpfs /tmp:rw,size=2048m --cap-drop ALL \
             --mount "type=bind,source=$GITHUB_WORKSPACE/artifacts/runtime-image.tar,target=/scan/image.tar,readonly" \
             aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
@@ -188,7 +189,7 @@ jobs:
             --format json --input /scan/image.tar > artifacts/image-security.json
 
       - name: Verify complete image inventory
-        run: node tools/verify-image-security.js artifacts/image-security.json
+        run: node tools/verify-image-security.js
 
       - name: Retain image scan evidence
         if: always()

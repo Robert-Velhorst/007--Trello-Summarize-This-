@@ -13,6 +13,7 @@ if (!backendPath) {
 }
 const sourceFiles = {
   "generic_feed.go": "internal/accountfeed/generic_feed.go",
+  "fetcher.go": "internal/accountfeed/fetcher.go",
   "enum.go": "internal/accountfeed/enum.go",
   "bridge.go": "internal/accountfeed/bridge.go",
   "service.go": "internal/source/service.go"
@@ -43,8 +44,8 @@ try {
     "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
     "--tmpfs", "/tmp:rw,exec,size=256m", "--mount", `type=bind,source=${directory},target=/probe,readonly`,
     "--workdir", "/tmp", "--env", "GOCACHE=/tmp/go-cache", "--env", "GO111MODULE=off",
-    "--env", "GOPROXY=off", "--env", "GOSUMDB=off",
-    "golang:1.25.13", "go", "run", "/probe/extract.go"
+    "--env", "GOPROXY=off", "--env", "GOSUMDB=off", "--env", "GOTOOLCHAIN=local", "--env", "CGO_ENABLED=0",
+    "golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c", "go", "run", "/probe/extract.go"
   ], { stdio: "inherit", timeout: 180_000 });
   console.log(JSON.stringify({
     scope: "Actual HAI account-feed parser and Connected Sources JSON types; not live HAI ingestion, normalization, database writes, or operation execution",

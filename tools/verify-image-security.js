@@ -39,12 +39,13 @@ function validateImageReport(report, expectedDependencies) {
 
 if (require.main === module) {
   try {
-    if (process.argv.length !== 3) reject("EXPECTED_REPORT_PATH");
+    if (process.argv.length !== 2) reject("UNEXPECTED_ARGUMENT");
     const root = path.resolve(__dirname, "..");
     const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
     const expected = Object.fromEntries(Object.keys(manifest.dependencies || {}).map(name => [name, lock.packages?.[`node_modules/${name}`]?.version]));
-    console.log(JSON.stringify(validateImageReport(JSON.parse(fs.readFileSync(process.argv[2], "utf8")), expected)));
+    const reportPath = path.join(root, "artifacts", "image-security.json");
+    console.log(JSON.stringify(validateImageReport(JSON.parse(fs.readFileSync(reportPath, "utf8")), expected)));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
