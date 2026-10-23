@@ -43,9 +43,14 @@
   },
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "pg": "^8.23.1"
+    "pg": "8.23.1"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^6.23.0"
-  }
+    "@yao-pkg/pkg": "6.24.0"
+  },
+  "engines": {
+    "node": ">=24.22.1 <25 || >=26.12.1 <27",
+    "npm": ">=12.2.1 <13"
+  },
+  "packageManager": "npm@12.2.1"
 }

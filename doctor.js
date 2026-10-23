@@ -121,10 +121,10 @@ addCheck(
 );
 
 // Node.js version check
-const nodeVersion = process.versions.node.split(".").map(Number);
+const { supportedNodeVersion } = require("./tools/node-runtime-policy");
 addCheck(
-  "Node.js version >= 18",
-  nodeVersion[0] >= 18,
+  "Patched Node.js 24.22.1+ (24.x) or 26.12.1+ (26.x)",
+  supportedNodeVersion(process.version),
   `Current: ${process.version}`
 );
 

@@ -1,6 +1,6 @@
 # CI/CD Quality Gates
 
-Date: 2026-07-23 (Phase 068)
+Updated: 2026-10-23
 
 ## CI Pipeline
 
@@ -12,16 +12,22 @@ File: `.github/workflows/ci.yml`
 
 ### Jobs
 
-**Job 1: test** (Node 24.22.0 and 26.12.0 matrix)
-1. `npm ci --prefer-offline` — install dependencies
+**Job 1: test** (Node 24.22.1 and 26.12.1 matrix)
+1. Pin npm 12.2.1, `npm ci --omit=dev --prefer-offline`, then audit runtime and packaging dependencies from the full lock.
 2. `node test.js` — core logic and popup contract tests
 3. `node backend.test.js` — backend API contract tests
 4. `node adversarial.test.js` — adversarial, isolation, path traversal tests
 5. `node doctor.js` — self-diagnostics (current required-file and operations checks)
 
+The job also runs static packaging, local-server boundaries, frontend session revocation, worker lifecycle, HTTP error containment, queued PostgreSQL snapshots, transfer protection, operations, E2E, large datasets, PostgreSQL persistence and labeled evaluation. PostgreSQL 18.6 runs in the CI service. A dedicated runtime-policy test rejects unpatched/odd/prerelease Node versions.
+
 **Job 2: lint-docs**
-1. Verify all 14 required documentation files exist
+1. Verify all 17 required documentation files exist
 2. Verify no overclaiming patterns in key documents (no "99.9% accuracy" etc.)
+
+**Job 3: container** builds the production backend image, including stable Alpine package updates.
+
+**Job 4: windows-installer** builds the packaged backend and installer, verifies embedded Node 26.12.1+, startup/resource probes and the payload, and exercises install/uninstall in the hosted runner. Local compilation is not proof of hosted install/uninstall or operator acceptance.
 
 ### Gate Policy
 

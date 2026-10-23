@@ -10,12 +10,26 @@ if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
   throw "Packaged backend was not found at $Executable"
 }
 
-$DataDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("SummarizeThisExeTest-" + [guid]::NewGuid().ToString("N"))
+$TempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+$DataDirectory = [System.IO.Path]::GetFullPath((Join-Path $TempRoot ("SummarizeThisExeTest-" + [guid]::NewGuid().ToString("N"))))
+if (-not $DataDirectory.StartsWith($TempRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Packaged backend test data must stay inside its temporary directory."
+}
 New-Item -ItemType Directory -Path $DataDirectory | Out-Null
 $StorePath = Join-Path $DataDirectory "store.json"
 $Process = $null
 
 try {
+  $OriginalPkgExecPath = $env:PKG_EXECPATH
+  try {
+    $env:PKG_EXECPATH = 'PKG_INVOKE_NODEJS'
+    $EmbeddedNodeVersion = & $Executable -p 'process.version'
+    if ($LASTEXITCODE -ne 0 -or $EmbeddedNodeVersion -notmatch '^v26\.\d+\.\d+$' -or [Version]$EmbeddedNodeVersion.TrimStart('v') -lt [Version]'26.12.1') {
+      throw "Packaged backend requires patched Node 26.12.1+; found $EmbeddedNodeVersion"
+    }
+  } finally {
+    $env:PKG_EXECPATH = $OriginalPkgExecPath
+  }
   $env:JWT_SECRET = "standalone-test-session-secret-32-characters"
   $env:ADMIN_PASSWORD = "standalone-test-admin-password"
   $env:ADMIN_EMAIL = "standalone-admin@example.test"
@@ -61,6 +75,7 @@ try {
   [pscustomobject]@{
     Status = $Health.status
     Version = $Health.version
+    EmbeddedNodeVersion = $EmbeddedNodeVersion
     Storage = $Health.storage.kind
     StoreBytes = (Get-Item -LiteralPath $StorePath).Length
     ExecutableBytes = (Get-Item -LiteralPath $Executable).Length

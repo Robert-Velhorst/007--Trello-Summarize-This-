@@ -252,8 +252,8 @@ Trello cannot use a private `127.0.0.1` connector URL from its hosted website. K
 
 ### Requirements
 
-- Node.js 24.22.0 or 26.12.0 (the current CI targets).
-- npm.
+- Node.js 24.22.1+ (24.x) or 26.12.1+ (26.x), matching the patched CI targets.
+- npm 12.2.1 (pinned in packageManager and backend builds).
 - PowerShell on Windows for installer scripts.
 - Docker only if running the Docker backend stack.
 - PostgreSQL only if running PostgreSQL tests or production-like storage.
@@ -261,8 +261,11 @@ Trello cannot use a private `127.0.0.1` connector URL from its hosted website. K
 ### Install dependencies
 
 ```bash
-npm install
+npm install --global npm@12.2.1
+npm ci
 ```
+
+See [the October stable dependency verification](docs/STABLE_DEPENDENCIES_2026-10.md) for runtime, PostgreSQL/Caddy image pins and the verified local Windows artifacts. Live provider and deployment acceptance are separate gates.
 
 ### Run the static development server
 
