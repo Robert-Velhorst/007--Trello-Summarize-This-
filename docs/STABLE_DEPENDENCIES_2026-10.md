@@ -1,5 +1,25 @@
 # Stable runtime and dependency baseline - 2026-10-23
 
+## 24 October packager transport follow-up
+
+The packager's `@yao-pkg/pkg-fetch` 3.6.7 declares Undici ^7.28.0, while current
+public stable is 8.12.3. A scoped override now selects 8.12.3. Its minimum Node
+is 22.19.0, which both supported application/packaging runtime targets exceed.
+This is an explicit major override and is not a claim of upstream declared
+support for major 8.
+
+Inspection of the current packager fetch utility found its use of `fetch`,
+`ProxyAgent`, response headers/body and dispatcher `close`. Existing packaging,
+embedded-runtime and complete application checks must qualify this integration;
+live proxy authentication is not established by a clean lock or an API review.
+No transport API or security assertion is removed or weakened.
+
+Lock resolution disables lifecycle scripts. Earlier verification and locally
+rebuilt executable hashes below belong to the preceding head. They do not
+qualify the new graph. Current-head hosted checks must rebuild/verify the
+packaged runtime. No local application suite, installer, provider or deployment
+was started for this follow-up.
+
 ## Changes
 
 - Both declared packages match current npm stable metadata: pg 8.23.1 (retained, now exact) and @yao-pkg/pkg 6.24.0 (updated from 6.23.0). The refreshed lock contains zero known npm audit vulnerabilities, including packaging dependencies. Upstream prebuild-install is deprecated; it remains a transitive dependency of the latest packager.

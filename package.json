@@ -48,6 +48,11 @@
   "devDependencies": {
     "@yao-pkg/pkg": "6.24.0"
   },
+  "overrides": {
+    "@yao-pkg/pkg-fetch": {
+      "undici": "8.12.3"
+    }
+  },
   "engines": {
     "node": ">=24.22.1 <25 || >=26.12.1 <27",
     "npm": ">=12.2.1 <13"
