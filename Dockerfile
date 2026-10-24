@@ -1,4 +1,4 @@
-FROM node:26.12.0-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
 
 ENV NODE_ENV=production \
     API_HOST=0.0.0.0 \
@@ -10,8 +10,12 @@ WORKDIR /app
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node backend-app.js backend-cli.js backend-config.js backend-lock.js backend-migrations.js backend-server.js backend-storage.js backend-summary.js backend-support.js backend-transfer.js backend-worker.js worker.js ./
 
-RUN npm ci --omit=dev --prefer-offline \
+RUN apk upgrade --no-cache \
+    && npm install --global npm@12.2.1 \
+    && npm ci --omit=dev --prefer-offline \
     && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
     && mkdir -p /app/database/runtime \
     && chown -R node:node /app/database
 

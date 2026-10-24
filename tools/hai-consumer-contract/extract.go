@@ -16,7 +16,7 @@ func run() error {
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return err
 	}
-	for _, name := range []string{"generic_feed.go", "enum.go", "bridge.go", "service.go"} {
+	for _, name := range []string{"generic_feed.go", "enum.go", "bridge.go", "service.go", "fetcher.go"} {
 		fileSet := token.NewFileSet()
 		source, err := parser.ParseFile(fileSet, filepath.Join("/probe/sources", name), nil, 0)
 		if err != nil {
@@ -25,6 +25,18 @@ func run() error {
 		source.Name.Name = "main"
 		declarations := []ast.Decl{}
 		for _, declaration := range source.Decls {
+			if name == "fetcher.go" {
+				// Preserve the actual parser size bound without including live fetchers.
+				if group, ok := declaration.(*ast.GenDecl); ok && group.Tok == token.CONST {
+					for _, spec := range group.Specs {
+						value := spec.(*ast.ValueSpec)
+						if len(value.Names) == 1 && value.Names[0].Name == "maxFeedBytes" {
+							declarations = append(declarations, &ast.GenDecl{Tok: token.CONST, Specs: []ast.Spec{value}})
+						}
+					}
+				}
+				continue
+			}
 			if name == "service.go" {
 				group, ok := declaration.(*ast.GenDecl)
 				if !ok || group.Tok != token.TYPE {
@@ -42,6 +54,14 @@ func run() error {
 			if function, ok := declaration.(*ast.FuncDecl); ok && name == "generic_feed.go" &&
 				(function.Name.Name == "ToFeedItem" || function.Name.Name == "operationTypeForItem") {
 				continue
+			}
+			if function, ok := declaration.(*ast.FuncDecl); ok && name == "bridge.go" {
+				// Keep provider parsing; live bridge connection status is outside this probe.
+				switch function.Name.Name {
+				case "allProviders", "String", "IsValid", "ParseProvider":
+				default:
+					continue
+				}
 			}
 			declarations = append(declarations, declaration)
 		}

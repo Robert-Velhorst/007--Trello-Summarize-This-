@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
         env:
           POSTGRES_DB: summarize_this_test
           POSTGRES_USER: summarize_this_test
@@ -31,23 +31,35 @@ jobs:
       TEST_DATABASE_URL: postgresql://summarize_this_test:summarize_this_test_password@127.0.0.1:5432/summarize_this_test
     strategy:
       matrix:
-        node-version: [24.22.0, 26.12.0]
+        node-version: [24.22.1, 26.12.1]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
 
+      - name: Pin npm
+        run: npm install --global npm@12.2.1
+
       - name: Install dependencies
         run: npm ci --omit=dev --prefer-offline
 
+      - name: Audit runtime and packaging dependencies
+        run: npm audit --audit-level=moderate --include=dev --package-lock-only
+
       - name: Run core tests
         run: node test.js
+
+      - name: Verify patched runtime policy
+        run: node tools/node-runtime-policy.test.js
+
+      - name: Verify image report policy
+        run: node tools/verify-image-security.test.js
 
       - name: Verify production static package
         run: node static-site.test.js
@@ -102,12 +114,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.12.0
+          node-version: 26.12.1
 
       - name: Verify required docs exist
         run: |
@@ -154,23 +166,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up policy verifier runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
 
       - name: Build production image
         run: docker build --tag summarize-this:test .
+
+      - name: Scan installed runtime and OS packages
+        run: |
+          mkdir -p artifacts
+          docker image save summarize-this:test --output artifacts/runtime-image.tar
+          chmod 0444 artifacts/runtime-image.tar
+          docker run --rm --read-only --tmpfs /tmp:rw,size=2048m --cap-drop ALL \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/artifacts/runtime-image.tar,target=/scan/image.tar,readonly" \
+            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --cache-dir /tmp/trivy-cache --scanners vuln --skip-java-db-update --quiet \
+            --list-all-pkgs --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --format json --input /scan/image.tar > artifacts/image-security.json
+
+      - name: Verify complete image inventory
+        run: node tools/verify-image-security.js
+
+      - name: Retain image scan evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/image-security.json
+          if-no-files-found: warn
+          retention-days: 7
 
   windows-installer:
     name: Windows 11 installer
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.12.0
+          node-version: 26.12.1
           cache: "npm"
+
+      - name: Pin npm
+        run: npm install --global npm@12.2.1
 
       - name: Install dependencies
         run: npm ci --prefer-offline
@@ -201,7 +245,7 @@ jobs:
         run: .\tools\test-windows-install.ps1
 
       - name: Upload installer
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: SummarizeThisSetup
           path: dist/windows-installer/SummarizeThisSetup.exe

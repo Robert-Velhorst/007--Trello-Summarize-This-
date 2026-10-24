@@ -7,6 +7,9 @@ import (
 )
 
 func verify() error {
+	if _, err := ParseGenericFeed(make([]byte, maxFeedBytes+1), 0, 0); err == nil {
+		return fmt.Errorf("actual parser did not enforce its extracted feed size bound")
+	}
 	for _, name := range []string{"feed.json", "empty-page.json"} {
 		body, err := os.ReadFile("/probe/" + name)
 		if err != nil {

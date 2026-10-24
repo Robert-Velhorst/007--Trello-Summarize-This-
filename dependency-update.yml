@@ -1,3 +1,7 @@
+# Historical reference only: not installed as a GitHub Actions workflow.
+# Uses the retired enhanced-package layout; current gates live in .github/workflows/.
+# See docs/STABLE_DEPENDENCIES_2026-10.md. Do not copy this sample into active workflows.
+
 name: Dependency Updates
 
 on:

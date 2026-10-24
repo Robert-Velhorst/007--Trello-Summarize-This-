@@ -2,6 +2,8 @@
 .github
 .agents
 .env
+.env.*
+node_modules
 .npm-cache
 .tmp
 database/runtime
